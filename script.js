@@ -14,7 +14,7 @@ ctx.setTransform(DPR, 0, 0, DPR, 0, 0); // 將繪圖縮放回 CSS 尺寸
 // 載入圖像
 const sprite = new Image();
 sprite.crossOrigin = "anonymous";
-sprite.src = "Pal_test.png";
+sprite.src = "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEj1neY_SOOKvJWgmpMNAsKzIckJXmqMt0_Oi3U15mgQS7FT7vOngoPdj2k3jq73N1BAHjhQqYya_eKpBSaMPZ1LiCqL1m4jdNsd291HRI6ZFDpoYBJE3difkDd_G1gDp6VhLON990lxJ-BoJw4aN5nFisKdc7IQacHpBztvvSVXc07TvfLhLVgiHH7mcuk/s1536/Pal_test.png";
 
 // Sprite 設定（可調）
 const frameWidth = 64;
