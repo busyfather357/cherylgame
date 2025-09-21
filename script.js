@@ -1,4 +1,3 @@
-<script>
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
@@ -76,4 +75,3 @@ window.addEventListener("keydown", (e) => {
     fps = Math.max(1, fps - 2);
   }
 });
-</script>
