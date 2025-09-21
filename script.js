@@ -7,7 +7,7 @@ canvas.height = 256;
 
 // 載入圖像
 const sprite = new Image();
-sprite.src = "Pal_test.png"; // 這個檔案要放在同一資料夾
+sprite.src = "https://busyfather357.github.io/cherylgame/Pal_test.png"; // 這個檔案要放在同一資料夾
 
 // Sprite 設定
 const frameWidth = 64;
