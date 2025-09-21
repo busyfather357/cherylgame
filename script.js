@@ -29,9 +29,21 @@ let playing = true;
 let lastTime = 0;
 const frameDuration = 1000 / fps;
 
-// 圖片載入錯誤處理
-sprite.onload = () => requestAnimationFrame(loop);
-sprite.onerror = (e) => console.error("Sprite load error", e);
+// 新增變數追蹤圖片是否載入成功
+let spriteLoaded = false;
+
+// 圖片載入錯誤處理 + log
+sprite.onload = () => {
+  spriteLoaded = true;
+  console.log("Sprite loaded successfully!");
+  requestAnimationFrame(loop);
+};
+sprite.onerror = (e) => {
+  spriteLoaded = false;
+  console.error("Sprite load error", e);
+  alert("Sprite image failed to load! Check the URL or CORS settings.");
+  requestAnimationFrame(loop); // 仍然啟動 loop，讓 fallback 能顯示
+};
 
 // 將 sprite 繪在畫布中央，並可放大縮小
 const scale = 2; // 顯示時放大倍數
@@ -47,20 +59,37 @@ function loop(timestamp) {
     lastTime = timestamp - (delta % frameDuration);
   }
 
-  // 清除並繪製
   ctx.clearRect(0, 0, W, H);
 
-  // 計算當前來源位置（支援多列）
-  const sx = (frameIndex % framesPerRow) * frameWidth;
-  const sy = Math.floor(frameIndex / framesPerRow) * frameHeight;
+  // Always draw a fallback test square (for debugging)
+  ctx.fillStyle = "#ffcccc";
+  ctx.fillRect(10, 10, 40, 40);
 
-  // 繪製在畫布中央
-  const dw = frameWidth * scale;
-  const dh = frameHeight * scale;
-  const dx = (W - dw) / 2;
-  const dy = (H - dh) / 2;
+  // Log sprite drawing attempt
+  if (spriteLoaded) {
+    // 計算當前來源位置（支援多列）
+    const sx = (frameIndex % framesPerRow) * frameWidth;
+    const sy = Math.floor(frameIndex / framesPerRow) * frameHeight;
 
-  ctx.drawImage(sprite, sx, sy, frameWidth, frameHeight, dx, dy, dw, dh);
+    // 繪製在畫布中央
+    const dw = frameWidth * scale;
+    const dh = frameHeight * scale;
+    const dx = (W - dw) / 2;
+    const dy = (H - dh) / 2;
+
+    try {
+      ctx.drawImage(sprite, sx, sy, frameWidth, frameHeight, dx, dy, dw, dh);
+      console.log("Drawing sprite frame:", frameIndex, "at", dx, dy, "source:", sx, sy);
+    } catch (err) {
+      console.error("Error drawing sprite:", err);
+    }
+  } else {
+    // fallback: draw a message for missing image
+    ctx.fillStyle = "#333";
+    ctx.font = "16px sans-serif";
+    ctx.fillText("No sprite image", 65, 140);
+    console.log("Fallback: Sprite not loaded, showing placeholder.");
+  }
 
   requestAnimationFrame(loop);
 }
@@ -69,9 +98,18 @@ function loop(timestamp) {
 window.addEventListener("keydown", (e) => {
   if (e.code === "Space") {
     playing = !playing;
+    console.log("Toggled playing:", playing);
   } else if (e.code === "ArrowUp") {
     fps = Math.min(60, fps + 2);
+    console.log("Increased FPS to", fps);
   } else if (e.code === "ArrowDown") {
     fps = Math.max(1, fps - 2);
+    console.log("Decreased FPS to", fps);
   }
 });
+
+// 如果圖片很快就載入（快取），onload 可能已經觸發，需手動啟動 loop
+if (sprite.complete && sprite.naturalWidth !== 0) {
+  spriteLoaded = true;
+  requestAnimationFrame(loop);
+}
