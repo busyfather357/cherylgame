@@ -1,14 +1,42 @@
-/* 設定：把這個字串換成你的圖片來源 URL 或 object URL */
-const SPRITE_SHEET_SRC = 'Pal_test.png'; // Make sure this is the correct URL https://busyfather357.github.io/cherylgame/Pal_test.png
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
 
-/* Atlas 內文 （也可以改成從伺服器載入 JSON） */
-const ATLAS = {
-  frameWidth: 64,
-  frameHeight: 64,
-// ... (the rest of your JavaScript code goes here) ...
+// 設定畫布大小
+canvas.width = 256;
+canvas.height = 256;
 
-/* 主迴圈 */
-let lastTime = 0;
-function loop(now) {
-  // ... (rest of the code)
+// 載入圖像
+const sprite = new Image();
+sprite.src = "Pal_test.png"; // 這個檔案要放在同一資料夾
+
+// Sprite 設定
+const frameWidth = 64;
+const frameHeight = 64;
+let frameIndex = 0;
+let tick = 0;
+
+sprite.onload = function () {
+  requestAnimationFrame(loop);
+};
+
+function loop() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // 繪製目前的 frame
+  ctx.drawImage(
+    sprite,
+    frameIndex * frameWidth, // source x
+    0,                        // source y
+    frameWidth, frameHeight,  // source w/h
+    96, 96,                   // draw x/y
+    frameWidth, frameHeight   // draw w/h
+  );
+
+  // 更新 frame
+  tick++;
+  if (tick % 10 === 0) { // 控制速度
+    frameIndex = (frameIndex + 1) % 4; // 假設一排有 4 張
+  }
+
+  requestAnimationFrame(loop);
 }
