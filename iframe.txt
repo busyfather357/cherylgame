@@ -1,0 +1,7 @@
+<div style="width:100%; max-width:512px; margin:auto; border:1px solid #555;">
+  <iframe
+    src="https://github.com/busyfather357/cherylgame/"
+    style="width:100%; height:288px; border:0;"
+    scrolling="no">
+  </iframe>
+</div>
