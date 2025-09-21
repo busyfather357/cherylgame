@@ -14,7 +14,8 @@ ctx.setTransform(DPR, 0, 0, DPR, 0, 0); // 將繪圖縮放回 CSS 尺寸
 // 載入圖像
 const sprite = new Image();
 sprite.crossOrigin = "anonymous";
-sprite.src = "Pal_test.png";
+//sprite.src = "Pal_test.png";
+sprite.src = "https://upload.wikimedia.org/wikipedia/commons/4/47/PNG_transparency_demonstration_1.png";
 
 // Sprite 設定（可調）
 const frameWidth = 64;
