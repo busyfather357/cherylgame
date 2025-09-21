@@ -28,7 +28,7 @@ function loop() {
     frameIndex * frameWidth, // source x
     0,                        // source y
     frameWidth, frameHeight,  // source w/h
-    96, 96,                   // draw x/y
+    0, 0,                   // draw x/y
     frameWidth, frameHeight   // draw w/h
   );
 
