@@ -1,126 +1,138 @@
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-// --- 1. 初始化畫布 (High DPI 支援) ---
+// --- 1. 初始化畫布 ---
 const W = 256;
 const H = 256;
-// 設定 CSS 顯示尺寸
 canvas.style.width = W + "px";
 canvas.style.height = H + "px";
-// 取得裝置像素比 (Retina 螢幕通常是 2)
 const DPR = window.devicePixelRatio || 1;
-// 設定實際渲染像素
 canvas.width = Math.floor(W * DPR);
 canvas.height = Math.floor(H * DPR);
-// 縮放繪圖 context，讓我們可以用邏輯座標 (256x256) 繪圖
 ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
 
-// --- 2. 關鍵設定：關閉圖片平滑處理 (Pixel Art 必備) ---
-ctx.imageSmoothingEnabled = false; 
+// --- 2. 關鍵設定：關閉模糊，保留像素風格 ---
+ctx.imageSmoothingEnabled = false;
 
-// --- 3. 遊戲狀態 ---
+// --- 3. 遊戲設定與狀態 ---
+const gameConfig = {
+    frameWidth: 64,     // 騎士每一格的寬度 (如果圖片跑版，請調整這裡)
+    frameHeight: 64,    // 騎士每一格的高度
+    framesPerRow: 4,    // 圖片一排有幾隻騎士 (根據原圖看是 4 隻)
+    scale: 2            // 放大倍率
+};
+
+// 定義動作的範圍 (根據圖片下方的說明：Idle是0-3, Run是4-9)
+const animations = {
+    idle: { start: 0, end: 3, speed: 6 },  // 待機：第 0 格到第 3 格
+    run:  { start: 4, end: 9, speed: 12 }  // 跑步：第 4 格到第 9 格 (速度快一點)
+};
+
 const gameState = {
-    fps: 10,           // 動畫速度
-    playing: true,
-    scale: 2,          // 圖片放大倍率
-    currentFrame: 0,
-    framesPerRow: 4,   // 圖片一行有幾格
-    totalFrames: 4,    // 總共幾格動畫
-    frameWidth: 64,    // 單格寬度 (根據圖片實際像素)
-    frameHeight: 64    // 單格高度
+    action: "idle",     // 目前動作：一開始是 'idle'
+    index: 0,           // 目前播到第幾張圖 (相對於動作的起始點)
+    lastFrameTime: 0    // 用來控制動畫速度
 };
 
 // --- 4. 載入圖片 ---
 const sprite = new Image();
-sprite.crossOrigin = "anonymous"; // 允許跨網域載入圖片
-// 這裡使用一張開源的貓咪走路圖
-sprite.src = "https://opengameart.org/sites/default/files/cat_0.png";
+// 請確保裁切乾淨的圖片命名為 knight.png 並放在同目錄
+sprite.src = "knight.png"; 
 
 let spriteLoaded = false;
-
 sprite.onload = () => {
     spriteLoaded = true;
-    console.log("Sprite loaded!");
+    console.log("騎士圖片載入成功！");
+};
+// 如果圖片讀取失敗 (例如路徑錯誤)，顯示錯誤
+sprite.onerror = () => {
+    console.error("找不到圖片！請確認檔名是否為 knight.png");
 };
 
-// --- 5. 遊戲迴圈 (Game Loop) ---
-let lastTime = 0;
-let accumulator = 0; 
-
+// --- 5. 遊戲主迴圈 ---
 function loop(timestamp) {
-    if (!lastTime) lastTime = timestamp;
+    // 計算時間差，控制動畫速度
+    if (!gameState.lastFrameTime) gameState.lastFrameTime = timestamp;
+    const currentAnim = animations[gameState.action];
     
-    // 計算兩幀之間的時間差 (ms)
-    const deltaTime = timestamp - lastTime;
-    lastTime = timestamp;
-
-    // 防止長時間切換視窗導致的時間暴衝 (Cap at 1000ms)
-    if (deltaTime > 1000) {
-        requestAnimationFrame(loop);
-        return;
-    }
-
-    if (gameState.playing) {
-        accumulator += deltaTime;
-        const frameDuration = 1000 / gameState.fps;
-
-        // 更新邏輯 (Update)
-        while (accumulator >= frameDuration) {
-            gameState.currentFrame = (gameState.currentFrame + 1) % gameState.totalFrames;
-            accumulator -= frameDuration;
+    // 根據動作設定的速度來決定要不要換下一張圖
+    // 1000 / speed = 每一格停留的毫秒數
+    if (timestamp - gameState.lastFrameTime > (1000 / currentAnim.speed)) {
+        gameState.index++;
+        
+        // 計算這個動作總共有幾張圖
+        const animLength = currentAnim.end - currentAnim.start + 1;
+        
+        // 如果播完了，就回到第 0 張 (循環播放)
+        if (gameState.index >= animLength) {
+            gameState.index = 0;
         }
+        
+        gameState.lastFrameTime = timestamp;
     }
 
-    // 繪製畫面 (Draw)
     draw();
-    
-    // 請求下一幀
     requestAnimationFrame(loop);
 }
 
 function draw() {
-    // 清空畫布
-    ctx.clearRect(0, 0, W, H);
+    // 1. 清空畫布 (填入背景色，避免上一幀殘留)
+    ctx.fillStyle = "#87CEEB"; // 天空藍背景
+    ctx.fillRect(0, 0, W, H);
 
-    // 顯示除錯資訊
-    ctx.fillStyle = "#333"; // 深灰色文字
-    ctx.font = "14px Consolas";
-    ctx.fillText(`FPS: ${gameState.fps} (Up/Down)`, 10, 20);
-    ctx.fillText(gameState.playing ? "State: Playing" : "State: Paused", 10, 40);
-
-    if (spriteLoaded) {
-        // 計算來源座標 (Source X, Y)
-        const sx = gameState.currentFrame * gameState.frameWidth; 
-        const sy = 0; // 第一列
-
-        // 計算目標座標 (置中)
-        const drawWidth = gameState.frameWidth * gameState.scale;
-        const drawHeight = gameState.frameHeight * gameState.scale;
-        const dx = (W - drawWidth) / 2;
-        const dy = (H - drawHeight) / 2;
-
-        // 繪圖
-        ctx.drawImage(
-            sprite, 
-            sx, sy, gameState.frameWidth, gameState.frameHeight, // 來源裁切
-            dx, dy, drawWidth, drawHeight                        // 目標位置與大小
-        );
-    } else {
-        // 載入中畫面
-        ctx.fillText("Loading Sprite...", 80, 130);
+    if (!spriteLoaded) {
+        ctx.fillStyle = "black";
+        ctx.fillText("Loading...", 100, 100);
+        return;
     }
+
+    // 2. 計算要在畫布上畫哪一張圖
+    const currentAnim = animations[gameState.action];
+    
+    // 算出真正的「圖片編號」 = 動作起始號碼 + 目前進度
+    const spriteIndex = currentAnim.start + gameState.index;
+
+    // 算出這張圖在 Sprite Sheet 裡的座標 (行與列)
+    // 這是數學魔法：算出第幾列(row)、第幾行(col)
+    const col = spriteIndex % gameConfig.framesPerRow;
+    const row = Math.floor(spriteIndex / gameConfig.framesPerRow);
+
+    const sx = col * gameConfig.frameWidth;
+    const sy = row * gameConfig.frameHeight;
+
+    // 3. 計算要畫在畫面上的位置 (置中)
+    const drawW = gameConfig.frameWidth * gameConfig.scale;
+    const drawH = gameConfig.frameHeight * gameConfig.scale;
+    const dx = (W - drawW) / 2;
+    const dy = (H - drawH) / 2;
+
+    // 4. 繪製
+    ctx.drawImage(
+        sprite,
+        sx, sy, gameConfig.frameWidth, gameConfig.frameHeight, // 來源座標與大小
+        dx, dy, drawW, drawH                                 // 目標座標與大小
+    );
+
+    // 顯示說明文字
+    ctx.fillStyle = "white";
+    ctx.font = "16px Arial";
+    ctx.fillText("按下空白鍵切換動作", 10, 240);
+    ctx.fillText("目前動作: " + gameState.action, 10, 20);
 }
 
-// --- 6. 鍵盤控制 ---
+// --- 6. 控制設定 ---
 window.addEventListener("keydown", (e) => {
     if (e.code === "Space") {
-        gameState.playing = !gameState.playing;
-    } else if (e.code === "ArrowUp") {
-        gameState.fps = Math.min(60, gameState.fps + 2);
-    } else if (e.code === "ArrowDown") {
-        gameState.fps = Math.max(1, gameState.fps - 2);
+        // 如果現在是 idle 就變 run，反之亦然
+        if (gameState.action === "idle") {
+            gameState.action = "run";
+            gameState.index = 0; // 切換動作時，重置回第一張
+        } else {
+            gameState.action = "idle";
+            gameState.index = 0;
+        }
     }
 });
 
-// 啟動迴圈
+// 啟動遊戲
 requestAnimationFrame(loop);
