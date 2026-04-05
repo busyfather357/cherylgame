@@ -32,6 +32,10 @@ const gameConfig = {
     showDebugBox: true  // [新增] 開啟這個可以看到紅框，調整完後改成 false
 };
 
+// 預先計算繪製尺寸以優化效能
+gameConfig.drawWidth = gameConfig.frameWidth * gameConfig.scale;
+gameConfig.drawHeight = gameConfig.frameHeight * gameConfig.scale;
+
 const animations = {
     // [修正] 根據圖片一排 4 張的規則修改範圍
     // 第一排 (0-3): 待機 (Idle)
@@ -139,7 +143,7 @@ function loop(timestamp) {
     }
 
     // 邊界檢查
-    const charSize = gameConfig.frameWidth * gameConfig.scale;
+    const charSize = gameConfig.drawWidth;
     if (gameState.x < -charSize/2) gameState.x = -charSize/2;
     if (gameState.x > W - charSize/2) gameState.x = W - charSize/2;
     if (gameState.y < -charSize/2) gameState.y = -charSize/2;
@@ -222,8 +226,8 @@ function draw() {
     const sx = col * gameConfig.frameWidth;
     const sy = row * gameConfig.frameHeight;
 
-    const drawW = gameConfig.frameWidth * gameConfig.scale;
-    const drawH = gameConfig.frameHeight * gameConfig.scale;
+    const drawW = gameConfig.drawWidth;
+    const drawH = gameConfig.drawHeight;
     
     const dx = gameState.x;
     const dy = gameState.y;
