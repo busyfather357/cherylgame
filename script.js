@@ -111,12 +111,10 @@ sprite.onload = () => {
 };
 
 // --- 5. 遊戲主迴圈 ---
-function loop(timestamp) {
+function update(timestamp) {
     if (!gameState.lastFrameTime) gameState.lastFrameTime = timestamp;
 
     if (gameState.paused) {
-        draw();
-        requestAnimationFrame(loop);
         return;
     }
 
@@ -186,7 +184,10 @@ function loop(timestamp) {
             break;
         }
     }
+}
 
+function loop(timestamp) {
+    update(timestamp);
     draw();
     requestAnimationFrame(loop);
 }
