@@ -136,36 +136,24 @@ function draw() {
 
     ctx.save();
     
-    // 處理翻轉
+    // 將座標系統原點移至角色中心，以便翻轉
+    ctx.translate(dx + drawW / 2, dy + drawH / 2);
     if (gameState.facingLeft) {
-        ctx.translate(dx + drawW / 2, dy + drawH / 2);
         ctx.scale(-1, 1);
-        ctx.drawImage(
-            sprite,
-            sx, sy, gameConfig.frameWidth, gameConfig.frameHeight,
-            -drawW / 2, -drawH / 2, drawW, drawH 
-        );
-        
-        // 繪製紅框 (除錯用) - 翻轉狀態
-        if (gameConfig.showDebugBox) {
-            ctx.strokeStyle = "red";
-            ctx.lineWidth = 2;
-            ctx.strokeRect(-drawW / 2, -drawH / 2, drawW, drawH);
-        }
+    }
 
-    } else {
-        ctx.drawImage(
-            sprite,
-            sx, sy, gameConfig.frameWidth, gameConfig.frameHeight,
-            dx, dy, drawW, drawH
-        );
+    // 在中心點繪製（需往回位移半個寬高）
+    ctx.drawImage(
+        sprite,
+        sx, sy, gameConfig.frameWidth, gameConfig.frameHeight,
+        -drawW / 2, -drawH / 2, drawW, drawH
+    );
 
-        // 繪製紅框 (除錯用) - 正常狀態
-        if (gameConfig.showDebugBox) {
-            ctx.strokeStyle = "red";
-            ctx.lineWidth = 2;
-            ctx.strokeRect(dx, dy, drawW, drawH);
-        }
+    // 繪製紅框 (除錯用)
+    if (gameConfig.showDebugBox) {
+        ctx.strokeStyle = "red";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(-drawW / 2, -drawH / 2, drawW, drawH);
     }
     
     ctx.restore();
