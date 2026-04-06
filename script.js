@@ -133,40 +133,9 @@ let spriteLoaded = false;
 let processedSpriteCanvas = null;
 
 sprite.onload = () => {
-    // 建立離線畫布 (Offscreen Canvas) 進行去背
-    const offCanvas = document.createElement('canvas');
-    offCanvas.width = sprite.width;
-    offCanvas.height = sprite.height;
-    const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
-
-    // 將原圖畫上離線畫布
-    offCtx.drawImage(sprite, 0, 0);
-
-    // 取得像素資料
-    const imageData = offCtx.getImageData(0, 0, offCanvas.width, offCanvas.height);
-    const data = imageData.data;
-
-    // 遍歷所有像素，將接近白色的背景（淺色網格）的 Alpha 設為 0
-    for (let i = 0; i < data.length; i += 4) {
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
-
-        // 假設背景是白色或淺灰色 (可依實際情況調整閾值)
-        if (r > 220 && g > 220 && b > 220) {
-            data[i + 3] = 0; // Alpha = 0 (透明)
-        }
-    }
-
-    // 將處理後的資料放回離線畫布
-    offCtx.putImageData(imageData, 0, 0);
-
-    // 儲存去背後的 Canvas
-    processedSpriteCanvas = offCanvas;
-
     // 根據圖片實際大小自動計算精靈圖各幀的寬高，確保整數避免破圖
     gameConfig.frameWidth = Math.floor(sprite.width / 4);
-    gameConfig.frameHeight = Math.floor(sprite.height / 4);
+    gameConfig.frameHeight = Math.floor(sprite.height / 5);
 
     // 設定 scale，使角色繪製的寬度接近 50px (與 Emoji 一致)
     gameConfig.scale = 50 / gameConfig.frameWidth;
@@ -175,8 +144,44 @@ sprite.onload = () => {
     gameConfig.drawWidth = gameConfig.frameWidth * gameConfig.scale;
     gameConfig.drawHeight = gameConfig.frameHeight * gameConfig.scale;
 
+    try {
+        // 建立離線畫布 (Offscreen Canvas) 進行去背
+        const offCanvas = document.createElement('canvas');
+        offCanvas.width = sprite.width;
+        offCanvas.height = sprite.height;
+        const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
+
+        // 將原圖畫上離線畫布
+        offCtx.drawImage(sprite, 0, 0);
+
+        // 取得像素資料
+        const imageData = offCtx.getImageData(0, 0, offCanvas.width, offCanvas.height);
+        const data = imageData.data;
+
+        // 遍歷所有像素，將接近白色的背景（淺色網格）的 Alpha 設為 0
+        for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+
+            // 假設背景是白色或淺灰色 (可依實際情況調整閾值)
+            if (r > 245 && g > 245 && b > 245) {
+                data[i + 3] = 0; // Alpha = 0 (透明)
+            }
+        }
+
+        // 將處理後的資料放回離線畫布
+        offCtx.putImageData(imageData, 0, 0);
+
+        // 儲存去背後的 Canvas
+        processedSpriteCanvas = offCanvas;
+        console.log("圖片載入成功且去背完成！", "自動計算 frameWidth:", gameConfig.frameWidth, "frameHeight:", gameConfig.frameHeight);
+    } catch (e) {
+        console.warn(e);
+        processedSpriteCanvas = sprite;
+    }
+
     spriteLoaded = true;
-    console.log("圖片載入成功且去背完成！", "自動計算 frameWidth:", gameConfig.frameWidth, "frameHeight:", gameConfig.frameHeight);
 };
 
 // --- 5. 遊戲主迴圈 ---
