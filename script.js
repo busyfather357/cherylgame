@@ -22,31 +22,63 @@ window.addEventListener('resize', resizeCanvas);
 window.addEventListener('orientationchange', resizeCanvas);
 resizeCanvas(); // Initial call
 
-function createBackgroundPattern() {
+function createBackgroundPattern(level) {
     const bgCanvas = document.createElement('canvas');
     bgCanvas.width = 50;
     bgCanvas.height = 50;
     const bgCtx = bgCanvas.getContext('2d');
 
-    // Draw checkerboard grass pattern
-    bgCtx.fillStyle = '#4CAF50'; // Base green
-    bgCtx.fillRect(0, 0, 50, 50);
+    if (level === 1) {
+        // Level 1: Grass
+        bgCtx.fillStyle = '#4CAF50'; // Base green
+        bgCtx.fillRect(0, 0, 50, 50);
 
-    bgCtx.fillStyle = '#45a049'; // Darker green
-    bgCtx.fillRect(0, 0, 25, 25);
-    bgCtx.fillRect(25, 25, 25, 25);
+        bgCtx.fillStyle = '#45a049'; // Darker green
+        bgCtx.fillRect(0, 0, 25, 25);
+        bgCtx.fillRect(25, 25, 25, 25);
 
-    // Add some simple pixel texture dots
-    bgCtx.fillStyle = '#388E3C';
-    bgCtx.fillRect(5, 5, 2, 2);
-    bgCtx.fillRect(35, 10, 2, 2);
-    bgCtx.fillRect(15, 35, 2, 2);
-    bgCtx.fillRect(40, 40, 2, 2);
+        // Add some simple pixel texture dots
+        bgCtx.fillStyle = '#388E3C';
+        bgCtx.fillRect(5, 5, 2, 2);
+        bgCtx.fillRect(35, 10, 2, 2);
+        bgCtx.fillRect(15, 35, 2, 2);
+        bgCtx.fillRect(40, 40, 2, 2);
+    } else if (level === 2) {
+        // Level 2: Beach/Ocean
+        bgCtx.fillStyle = '#F5DEB3'; // Light sand
+        bgCtx.fillRect(0, 0, 50, 50);
+
+        bgCtx.fillStyle = '#87CEEB'; // Light blue ocean
+        bgCtx.fillRect(0, 0, 25, 25);
+        bgCtx.fillRect(25, 25, 25, 25);
+
+        // Add wave dots
+        bgCtx.fillStyle = '#4682B4';
+        bgCtx.fillRect(5, 5, 2, 2);
+        bgCtx.fillRect(35, 10, 2, 2);
+        bgCtx.fillRect(15, 35, 2, 2);
+        bgCtx.fillRect(40, 40, 2, 2);
+    } else {
+        // Level 3+: Dungeon/Volcano
+        bgCtx.fillStyle = '#2F4F4F'; // Dark slate gray
+        bgCtx.fillRect(0, 0, 50, 50);
+
+        bgCtx.fillStyle = '#8B0000'; // Dark red
+        bgCtx.fillRect(0, 0, 25, 25);
+        bgCtx.fillRect(25, 25, 25, 25);
+
+        // Add texture dots
+        bgCtx.fillStyle = '#556B2F';
+        bgCtx.fillRect(5, 5, 2, 2);
+        bgCtx.fillRect(35, 10, 2, 2);
+        bgCtx.fillRect(15, 35, 2, 2);
+        bgCtx.fillRect(40, 40, 2, 2);
+    }
 
     return ctx.createPattern(bgCanvas, 'repeat');
 }
 
-let bgPattern = createBackgroundPattern();
+let bgPattern = createBackgroundPattern(1);
 
 // --- 2. 遊戲設定 (關鍵修改區域) ---
 const gameConfig = {
@@ -79,6 +111,7 @@ const gameState = {
     facingLeft: false,
     hp: 3,
     score: 0,
+    level: 1,
     paused: false,
     enemies: []
 };
@@ -104,12 +137,35 @@ bindTouch("btn-action", "Space"); // Optional action button
 function spawnEnemies(count) {
     gameState.enemies = [];
     for (let i = 0; i < count; i++) {
+        let isMonster = Math.random() > 0.5;
+        let type = isMonster ? 'monster' : 'chest';
+        let icon = '🎁';
+        let vx = 0;
+        let vy = 0;
+
+        if (isMonster) {
+            vx = (Math.random() * 2) - 1; // between -1 and 1
+            vy = (Math.random() * 2) - 1;
+
+            if (gameState.level === 1) {
+                icon = '👾';
+            } else if (gameState.level === 2) {
+                icon = Math.random() > 0.5 ? '🦀' : '🦈';
+            } else {
+                const icons = ['👾', '🦀', '🦈'];
+                icon = icons[Math.floor(Math.random() * icons.length)];
+            }
+        }
+
         gameState.enemies.push({
             x: Math.random() * (W - 100) + 50,
             y: Math.random() * (H - 100) + 50,
             width: 50,
             height: 50,
-            type: Math.random() > 0.5 ? 'monster' : 'chest',
+            type: type,
+            icon: icon,
+            vx: vx,
+            vy: vy,
             active: true
         });
     }
@@ -252,12 +308,55 @@ function update(timestamp) {
 
     for (let i = 0; i < gameState.enemies.length; i++) {
         let enemy = gameState.enemies[i];
-        if (enemy.active && checkCollision(playerRect, enemy)) {
-            gameState.paused = true;
-            gameState.currentEnemyIndex = i;
-            triggerMathChallenge();
+
+        if (enemy.active) {
+            // 怪物自主移動
+            if (enemy.type === 'monster') {
+                enemy.x += enemy.vx;
+                enemy.y += enemy.vy;
+
+                // 邊界碰撞反彈
+                if (enemy.x <= 0 || enemy.x + enemy.width >= W) {
+                    enemy.vx *= -1;
+                }
+                if (enemy.y <= 0 || enemy.y + enemy.height >= H) {
+                    enemy.vy *= -1;
+                }
+
+                // 偶爾隨機微調速度方向
+                if (Math.random() < 0.02) {
+                    enemy.vx += (Math.random() * 0.5) - 0.25;
+                    enemy.vy += (Math.random() * 0.5) - 0.25;
+
+                    // 限制最大速度
+                    enemy.vx = Math.max(-1.5, Math.min(1.5, enemy.vx));
+                    enemy.vy = Math.max(-1.5, Math.min(1.5, enemy.vy));
+                }
+            }
+
+            if (checkCollision(playerRect, enemy)) {
+                gameState.paused = true;
+                gameState.currentEnemyIndex = i;
+                triggerMathChallenge();
+                break;
+            }
+        }
+    }
+
+    // 檢查過關邏輯
+    let allCleared = true;
+    for (let i = 0; i < gameState.enemies.length; i++) {
+        if (gameState.enemies[i].active) {
+            allCleared = false;
             break;
         }
+    }
+
+    if (allCleared && gameState.enemies.length > 0) {
+        gameState.level += 1;
+        bgPattern = createBackgroundPattern(gameState.level);
+        spawnEnemies(5);
+        updateHUD();
     }
 }
 
@@ -277,9 +376,7 @@ function draw() {
     ctx.textBaseline = "middle";
     for (let enemy of gameState.enemies) {
         if (enemy.active) {
-            // 用 emoji 代表敵人與寶箱
-            const icon = enemy.type === 'monster' ? '👾' : '🎁';
-            ctx.fillText(icon, enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
+            ctx.fillText(enemy.icon, enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
 
             // 繪製敵人紅框 (除錯用)
             if (gameConfig.showDebugBox) {
@@ -399,6 +496,7 @@ function triggerMathChallenge() {
 // Cache DOM elements for HUD to avoid querying and recreating every time
 let hpDisplayCache = null;
 let scoreDisplayCache = null;
+let levelDisplayCache = null;
 let heartElementsCache = [];
 
 function updateHUD() {
@@ -406,6 +504,7 @@ function updateHUD() {
     if (!hpDisplayCache) {
         hpDisplayCache = document.getElementById("hp-display");
         scoreDisplayCache = document.getElementById("score-display");
+        levelDisplayCache = document.getElementById("level-display");
         heartElementsCache = Array.from(hpDisplayCache.getElementsByClassName("heart"));
 
         // Fallback if not initially present
@@ -425,6 +524,12 @@ function updateHUD() {
         if (heartElementsCache[i].textContent !== expectedText) {
             heartElementsCache[i].textContent = expectedText;
         }
+    }
+
+    // Update Level
+    const expectedLevel = `Level: ${gameState.level}`;
+    if (levelDisplayCache && levelDisplayCache.textContent !== expectedLevel) {
+        levelDisplayCache.textContent = expectedLevel;
     }
 
     // Update Score
