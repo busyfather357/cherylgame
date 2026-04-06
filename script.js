@@ -22,14 +22,39 @@ window.addEventListener('resize', resizeCanvas);
 window.addEventListener('orientationchange', resizeCanvas);
 resizeCanvas(); // Initial call
 
+function createBackgroundPattern() {
+    const bgCanvas = document.createElement('canvas');
+    bgCanvas.width = 50;
+    bgCanvas.height = 50;
+    const bgCtx = bgCanvas.getContext('2d');
+
+    // Draw checkerboard grass pattern
+    bgCtx.fillStyle = '#4CAF50'; // Base green
+    bgCtx.fillRect(0, 0, 50, 50);
+
+    bgCtx.fillStyle = '#45a049'; // Darker green
+    bgCtx.fillRect(0, 0, 25, 25);
+    bgCtx.fillRect(25, 25, 25, 25);
+
+    // Add some simple pixel texture dots
+    bgCtx.fillStyle = '#388E3C';
+    bgCtx.fillRect(5, 5, 2, 2);
+    bgCtx.fillRect(35, 10, 2, 2);
+    bgCtx.fillRect(15, 35, 2, 2);
+    bgCtx.fillRect(40, 40, 2, 2);
+
+    return ctx.createPattern(bgCanvas, 'repeat');
+}
+
+let bgPattern = createBackgroundPattern();
+
 // --- 2. 遊戲設定 (關鍵修改區域) ---
 const gameConfig = {
-    // ⚠️ 如果紅框比人太大，請試著把這裡改成 32, 48 或 60
-    frameWidth: 234,     
-    frameHeight: 245,    
-    framesPerRow: 4,    // 圖片一排固定是 4 張
-    scale: 2,           // 放大倍率
-    showDebugBox: true  // [新增] 開啟這個可以看到紅框，調整完後改成 false
+    frameWidth: 235.75, // Default/fallback
+    frameHeight: 306.25,
+    framesPerRow: 4,
+    scale: 50 / 235.75, // 調整為約 50px 寬度
+    showDebugBox: false
 };
 
 // 預先計算繪製尺寸以優化效能
@@ -106,8 +131,19 @@ sprite.src = "Pal_test.png";
 
 let spriteLoaded = false;
 sprite.onload = () => {
+    // 根據圖片實際大小自動計算精靈圖各幀的寬高
+    gameConfig.frameWidth = sprite.width / 4;
+    gameConfig.frameHeight = sprite.height / 4;
+
+    // 設定 scale，使角色繪製的寬度接近 50px
+    gameConfig.scale = 50 / gameConfig.frameWidth;
+
+    // 重新計算 drawWidth 和 drawHeight
+    gameConfig.drawWidth = gameConfig.frameWidth * gameConfig.scale;
+    gameConfig.drawHeight = gameConfig.frameHeight * gameConfig.scale;
+
     spriteLoaded = true;
-    console.log("圖片載入成功！");
+    console.log("圖片載入成功！", "自動計算 frameWidth:", gameConfig.frameWidth, "frameHeight:", gameConfig.frameHeight);
 };
 
 // --- 5. 遊戲主迴圈 ---
@@ -141,11 +177,12 @@ function update(timestamp) {
     }
 
     // 邊界檢查
-    const charSize = gameConfig.drawWidth;
-    if (gameState.x < -charSize/2) gameState.x = -charSize/2;
-    if (gameState.x > W - charSize/2) gameState.x = W - charSize/2;
-    if (gameState.y < -charSize/2) gameState.y = -charSize/2;
-    if (gameState.y > H - charSize/2) gameState.y = H - charSize/2;
+    const drawW = gameConfig.drawWidth;
+    const drawH = gameConfig.drawHeight;
+    if (gameState.x < -drawW/2) gameState.x = -drawW/2;
+    if (gameState.x > W - drawW/2) gameState.x = W - drawW/2;
+    if (gameState.y < -drawH/2) gameState.y = -drawH/2;
+    if (gameState.y > H - drawH/2) gameState.y = H - drawH/2;
 
     // 自動切換動畫狀態
     if (isMoving && gameState.action !== "run") {
@@ -169,10 +206,10 @@ function update(timestamp) {
 
     // 碰撞偵測
     const playerRect = {
-        x: gameState.x + (charSize / 4), // 縮小並置中碰撞範圍使其更自然
-        y: gameState.y + (charSize / 4),
-        width: charSize / 2,
-        height: charSize / 2
+        x: gameState.x + (drawW / 4), // 縮小並置中碰撞範圍使其更自然
+        y: gameState.y + (drawH / 4),
+        width: drawW / 2,
+        height: drawH / 2
     };
 
     for (let i = 0; i < gameState.enemies.length; i++) {
@@ -193,7 +230,7 @@ function loop(timestamp) {
 }
 
 function draw() {
-    ctx.fillStyle = "#87CEEB"; 
+    ctx.fillStyle = bgPattern;
     ctx.fillRect(0, 0, W, H);
 
     // 畫出敵人
@@ -365,8 +402,8 @@ function checkAnswer(selected, correct) {
         gameState.y += 100; // Bounce down
 
         // Ensure within bounds after knockback
-        const charSize = gameConfig.frameWidth * gameConfig.scale;
-        if (gameState.y > H - charSize/2) gameState.y = H - charSize/2;
+        const drawH = gameConfig.drawHeight;
+        if (gameState.y > H - drawH/2) gameState.y = H - drawH/2;
 
         setTimeout(() => {
             modalOverlay.style.display = "none";
