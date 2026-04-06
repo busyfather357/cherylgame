@@ -64,33 +64,80 @@ const gameState = {
     rows: 0
 };
 
+function checkMapConnectivity(map, startCol, startRow) {
+    if (!map || map.length === 0 || map[startRow][startCol] !== 0) return false;
+
+    let totalEmptySpaces = 0;
+    const rows = map.length;
+    const cols = map[0].length;
+
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            if (map[r][c] === 0) totalEmptySpaces++;
+        }
+    }
+
+    const visited = Array.from({ length: rows }, () => Array(cols).fill(false));
+    const queue = [{ c: startCol, r: startRow }];
+    visited[startRow][startCol] = true;
+    let reachableEmptySpaces = 0;
+
+    const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+
+    while (queue.length > 0) {
+        const { c, r } = queue.shift();
+        reachableEmptySpaces++;
+
+        for (const [dc, dr] of dirs) {
+            const nc = c + dc;
+            const nr = r + dr;
+
+            if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && map[nr][nc] === 0 && !visited[nr][nc]) {
+                visited[nr][nc] = true;
+                queue.push({ c: nc, r: nr });
+            }
+        }
+    }
+
+    return reachableEmptySpaces === totalEmptySpaces;
+}
+
 function generateMap(level) {
     gameState.cols = Math.ceil(W / TILE_SIZE);
     gameState.rows = Math.ceil(H / TILE_SIZE);
-    gameState.map = [];
 
     // Center spawn point
     const centerX = Math.floor(gameState.cols / 2);
     const centerY = Math.floor(gameState.rows / 2);
 
-    for (let r = 0; r < gameState.rows; r++) {
-        const row = [];
-        for (let c = 0; c < gameState.cols; c++) {
-            // Borders are walls
-            if (r === 0 || r === gameState.rows - 1 || c === 0 || c === gameState.cols - 1) {
-                row.push(1);
+    while (true) {
+        gameState.map = [];
+        for (let r = 0; r < gameState.rows; r++) {
+            const row = [];
+            for (let c = 0; c < gameState.cols; c++) {
+                // Borders are walls
+                if (r === 0 || r === gameState.rows - 1 || c === 0 || c === gameState.cols - 1) {
+                    row.push(1);
+                }
+                // Center 3x3 is floor
+                else if (Math.abs(r - centerY) <= 1 && Math.abs(c - centerX) <= 1) {
+                    row.push(0);
+                }
+                // Random obstacles
+                else {
+                    row.push(Math.random() < 0.15 ? 1 : 0);
+                }
             }
-            // Center 3x3 is floor
-            else if (Math.abs(r - centerY) <= 1 && Math.abs(c - centerX) <= 1) {
-                row.push(0);
-            }
-            // Random obstacles
-            else {
-                row.push(Math.random() < 0.15 ? 1 : 0);
-            }
+            gameState.map.push(row);
         }
-        gameState.map.push(row);
+
+        if (checkMapConnectivity(gameState.map, centerX, centerY)) {
+            break;
+        }
     }
+
+    gameState.x = centerX * TILE_SIZE;
+    gameState.y = centerY * TILE_SIZE;
 }
 
 const keys = {};
@@ -156,11 +203,12 @@ function spawnEnemies(count) {
         let attempts = 0;
         let placed = false;
         while (!placed && attempts < 100) {
-            spawnX = Math.random() * (W - 100) + 50;
-            spawnY = Math.random() * (H - 100) + 50;
-            const r = Math.floor(spawnY / TILE_SIZE);
-            const c = Math.floor(spawnX / TILE_SIZE);
+            const r = Math.floor(Math.random() * (gameState.rows - 2)) + 1;
+            const c = Math.floor(Math.random() * (gameState.cols - 2)) + 1;
+
             if (gameState.map[r] && gameState.map[r][c] === 0) {
+                spawnX = c * TILE_SIZE;
+                spawnY = r * TILE_SIZE;
                 placed = true;
             }
             attempts++;
@@ -186,10 +234,11 @@ generateMap(gameState.level);
 spawnEnemies(5); // Spawn initial enemies
 
 function isWallCollision(rect) {
-    const leftCol = Math.floor(rect.x / TILE_SIZE);
-    const rightCol = Math.floor((rect.x + rect.width) / TILE_SIZE);
-    const topRow = Math.floor(rect.y / TILE_SIZE);
-    const bottomRow = Math.floor((rect.y + rect.height) / TILE_SIZE);
+    const margin = 3;
+    const leftCol = Math.floor((rect.x + margin) / TILE_SIZE);
+    const rightCol = Math.floor((rect.x + rect.width - margin) / TILE_SIZE);
+    const topRow = Math.floor((rect.y + margin) / TILE_SIZE);
+    const bottomRow = Math.floor((rect.y + rect.height - margin) / TILE_SIZE);
 
     for (let r = topRow; r <= bottomRow; r++) {
         for (let c = leftCol; c <= rightCol; c++) {
@@ -674,8 +723,8 @@ function checkAnswer(selected, correct) {
                 alert("Game Over! Restarting...");
                 gameState.hp = 3;
                 gameState.score = 0;
-                gameState.x = (W - 128) / 2;
-                gameState.y = (H - 128) / 2;
+                gameState.x = Math.floor(gameState.cols / 2) * TILE_SIZE;
+                gameState.y = Math.floor(gameState.rows / 2) * TILE_SIZE;
                 spawnEnemies(5);
                 updateHUD();
             }
