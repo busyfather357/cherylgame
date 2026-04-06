@@ -134,6 +134,24 @@ bindTouch("btn-right", "ArrowRight");
 bindTouch("btn-action", "Space"); // Optional action button
 
 // --- 3. 敵人與碰撞邏輯 ---
+
+const emojiImageCache = {};
+
+function getEmojiSprite(emoji) {
+    if (emojiImageCache[emoji]) return emojiImageCache[emoji];
+
+    // 利用 SVG 強制系統使用原生字型渲染 Emoji
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="50" height="50">
+        <text x="25" y="38" font-size="40" text-anchor="middle" font-family="'Apple Color Emoji', 'Segoe UI Emoji', sans-serif">${emoji}</text>
+    </svg>`;
+
+    const img = new Image();
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+    emojiImageCache[emoji] = img;
+
+    return img;
+}
+
 function spawnEnemies(count) {
     gameState.enemies = [];
     for (let i = 0; i < count; i++) {
@@ -164,6 +182,7 @@ function spawnEnemies(count) {
             height: 50,
             type: type,
             icon: icon,
+            spriteImg: getEmojiSprite(icon), // 新增這行：預先產生並儲存圖片物件
             vx: vx,
             vy: vy,
             active: true
@@ -371,12 +390,12 @@ function draw() {
     ctx.fillRect(0, 0, W, H);
 
     // 畫出敵人
-    ctx.font = "40px 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji', 'Android Emoji', EmojiSymbols, sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
     for (let enemy of gameState.enemies) {
         if (enemy.active) {
-            ctx.fillText(enemy.icon, enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
+            // 改用 drawImage 繪製已經轉換好的 SVG Emoji 圖片
+            if (enemy.spriteImg && enemy.spriteImg.complete) {
+                ctx.drawImage(enemy.spriteImg, enemy.x, enemy.y, enemy.width, enemy.height);
+            }
 
             // 繪製敵人紅框 (除錯用)
             if (gameConfig.showDebugBox) {
