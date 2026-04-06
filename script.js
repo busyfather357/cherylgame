@@ -358,18 +358,42 @@ function triggerMathChallenge() {
     modalOverlay.style.display = "flex";
 }
 
+// Cache DOM elements for HUD to avoid querying and recreating every time
+let hpDisplayCache = null;
+let scoreDisplayCache = null;
+let heartElementsCache = [];
+
 function updateHUD() {
     // Update HP
-    const hpDisplay = document.getElementById("hp-display");
-    hpDisplay.innerHTML = "";
-    for (let i = 0; i < 3; i++) {
-        const heart = document.createElement("span");
-        heart.className = "heart";
-        heart.textContent = i < gameState.hp ? "❤️" : "🖤";
-        hpDisplay.appendChild(heart);
+    if (!hpDisplayCache) {
+        hpDisplayCache = document.getElementById("hp-display");
+        scoreDisplayCache = document.getElementById("score-display");
+        heartElementsCache = Array.from(hpDisplayCache.getElementsByClassName("heart"));
+
+        // Fallback if not initially present
+        if (heartElementsCache.length === 0) {
+            hpDisplayCache.innerHTML = "";
+            for (let i = 0; i < 3; i++) {
+                const heart = document.createElement("span");
+                heart.className = "heart";
+                hpDisplayCache.appendChild(heart);
+                heartElementsCache.push(heart);
+            }
+        }
     }
+
+    for (let i = 0; i < 3; i++) {
+        const expectedText = i < gameState.hp ? "❤️" : "🖤";
+        if (heartElementsCache[i].textContent !== expectedText) {
+            heartElementsCache[i].textContent = expectedText;
+        }
+    }
+
     // Update Score
-    document.getElementById("score-display").textContent = `Score: ${gameState.score}`;
+    const expectedScore = `Score: ${gameState.score}`;
+    if (scoreDisplayCache.textContent !== expectedScore) {
+        scoreDisplayCache.textContent = expectedScore;
+    }
 }
 
 let isAnswering = false;
