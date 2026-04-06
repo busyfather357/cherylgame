@@ -1,6 +1,8 @@
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
+const TILE_SIZE = 50;
+
 // --- 1. 初始化畫布 ---
 let W = window.innerWidth;
 let H = window.innerHeight;
@@ -22,63 +24,6 @@ window.addEventListener('resize', resizeCanvas);
 window.addEventListener('orientationchange', resizeCanvas);
 resizeCanvas(); // Initial call
 
-function createBackgroundPattern(level) {
-    const bgCanvas = document.createElement('canvas');
-    bgCanvas.width = 50;
-    bgCanvas.height = 50;
-    const bgCtx = bgCanvas.getContext('2d');
-
-    if (level === 1) {
-        // Level 1: Grass
-        bgCtx.fillStyle = '#4CAF50'; // Base green
-        bgCtx.fillRect(0, 0, 50, 50);
-
-        bgCtx.fillStyle = '#45a049'; // Darker green
-        bgCtx.fillRect(0, 0, 25, 25);
-        bgCtx.fillRect(25, 25, 25, 25);
-
-        // Add some simple pixel texture dots
-        bgCtx.fillStyle = '#388E3C';
-        bgCtx.fillRect(5, 5, 2, 2);
-        bgCtx.fillRect(35, 10, 2, 2);
-        bgCtx.fillRect(15, 35, 2, 2);
-        bgCtx.fillRect(40, 40, 2, 2);
-    } else if (level === 2) {
-        // Level 2: Beach/Ocean
-        bgCtx.fillStyle = '#F5DEB3'; // Light sand
-        bgCtx.fillRect(0, 0, 50, 50);
-
-        bgCtx.fillStyle = '#87CEEB'; // Light blue ocean
-        bgCtx.fillRect(0, 0, 25, 25);
-        bgCtx.fillRect(25, 25, 25, 25);
-
-        // Add wave dots
-        bgCtx.fillStyle = '#4682B4';
-        bgCtx.fillRect(5, 5, 2, 2);
-        bgCtx.fillRect(35, 10, 2, 2);
-        bgCtx.fillRect(15, 35, 2, 2);
-        bgCtx.fillRect(40, 40, 2, 2);
-    } else {
-        // Level 3+: Dungeon/Volcano
-        bgCtx.fillStyle = '#2F4F4F'; // Dark slate gray
-        bgCtx.fillRect(0, 0, 50, 50);
-
-        bgCtx.fillStyle = '#8B0000'; // Dark red
-        bgCtx.fillRect(0, 0, 25, 25);
-        bgCtx.fillRect(25, 25, 25, 25);
-
-        // Add texture dots
-        bgCtx.fillStyle = '#556B2F';
-        bgCtx.fillRect(5, 5, 2, 2);
-        bgCtx.fillRect(35, 10, 2, 2);
-        bgCtx.fillRect(15, 35, 2, 2);
-        bgCtx.fillRect(40, 40, 2, 2);
-    }
-
-    return ctx.createPattern(bgCanvas, 'repeat');
-}
-
-let bgPattern = createBackgroundPattern(1);
 
 // --- 2. 遊戲設定 (關鍵修改區域) ---
 const gameConfig = {
@@ -113,8 +58,40 @@ const gameState = {
     score: 0,
     level: 1,
     paused: false,
-    enemies: []
+    enemies: [],
+    map: [],
+    cols: 0,
+    rows: 0
 };
+
+function generateMap(level) {
+    gameState.cols = Math.ceil(W / TILE_SIZE);
+    gameState.rows = Math.ceil(H / TILE_SIZE);
+    gameState.map = [];
+
+    // Center spawn point
+    const centerX = Math.floor(gameState.cols / 2);
+    const centerY = Math.floor(gameState.rows / 2);
+
+    for (let r = 0; r < gameState.rows; r++) {
+        const row = [];
+        for (let c = 0; c < gameState.cols; c++) {
+            // Borders are walls
+            if (r === 0 || r === gameState.rows - 1 || c === 0 || c === gameState.cols - 1) {
+                row.push(1);
+            }
+            // Center 3x3 is floor
+            else if (Math.abs(r - centerY) <= 1 && Math.abs(c - centerX) <= 1) {
+                row.push(0);
+            }
+            // Random obstacles
+            else {
+                row.push(Math.random() < 0.15 ? 1 : 0);
+            }
+        }
+        gameState.map.push(row);
+    }
+}
 
 const keys = {};
 window.addEventListener("keydown", (e) => { keys[e.code] = true; });
@@ -175,21 +152,54 @@ function spawnEnemies(count) {
             }
         }
 
-        gameState.enemies.push({
-            x: Math.random() * (W - 100) + 50,
-            y: Math.random() * (H - 100) + 50,
-            width: 50,
-            height: 50,
-            type: type,
-            icon: icon,
-            spriteImg: getEmojiSprite(icon), // 新增這行：預先產生並儲存圖片物件
-            vx: vx,
-            vy: vy,
-            active: true
-        });
+        let spawnX, spawnY;
+        let attempts = 0;
+        let placed = false;
+        while (!placed && attempts < 100) {
+            spawnX = Math.random() * (W - 100) + 50;
+            spawnY = Math.random() * (H - 100) + 50;
+            const r = Math.floor(spawnY / TILE_SIZE);
+            const c = Math.floor(spawnX / TILE_SIZE);
+            if (gameState.map[r] && gameState.map[r][c] === 0) {
+                placed = true;
+            }
+            attempts++;
+        }
+
+        if (placed) {
+            gameState.enemies.push({
+                x: spawnX,
+                y: spawnY,
+                width: 50,
+                height: 50,
+                type: type,
+                icon: icon,
+                spriteImg: getEmojiSprite(icon), // 新增這行：預先產生並儲存圖片物件
+                vx: vx,
+                vy: vy,
+                active: true
+            });
+        }
     }
 }
+generateMap(gameState.level);
 spawnEnemies(5); // Spawn initial enemies
+
+function isWallCollision(rect) {
+    const leftCol = Math.floor(rect.x / TILE_SIZE);
+    const rightCol = Math.floor((rect.x + rect.width) / TILE_SIZE);
+    const topRow = Math.floor(rect.y / TILE_SIZE);
+    const bottomRow = Math.floor((rect.y + rect.height) / TILE_SIZE);
+
+    for (let r = topRow; r <= bottomRow; r++) {
+        for (let c = leftCol; c <= rightCol; c++) {
+            if (r < 0 || r >= gameState.rows || c < 0 || c >= gameState.cols || gameState.map[r][c] === 1) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
 
 function checkCollision(rect1, rect2) {
     return (
@@ -268,30 +278,48 @@ function update(timestamp) {
     }
 
     let isMoving = false;
+    let nextX = gameState.x;
+    let nextY = gameState.y;
 
     // 移動邏輯
     if (keys["ArrowRight"] || keys["KeyD"]) {
-        gameState.x += gameState.speed;
+        nextX += gameState.speed;
         isMoving = true;
         gameState.facingLeft = false;
     }
     if (keys["ArrowLeft"] || keys["KeyA"]) {
-        gameState.x -= gameState.speed;
+        nextX -= gameState.speed;
         isMoving = true;
         gameState.facingLeft = true; 
     }
     if (keys["ArrowUp"] || keys["KeyW"]) {
-        gameState.y -= gameState.speed;
+        nextY -= gameState.speed;
         isMoving = true;
     }
     if (keys["ArrowDown"] || keys["KeyS"]) {
-        gameState.y += gameState.speed;
+        nextY += gameState.speed;
         isMoving = true;
     }
 
-    // 邊界檢查
     const drawW = gameConfig.drawWidth;
     const drawH = gameConfig.drawHeight;
+
+    // 碰撞偵測 (玩家與牆壁)
+    if (isMoving) {
+        const testRect = {
+            x: nextX + (drawW / 4),
+            y: nextY + (drawH / 4),
+            width: drawW / 2,
+            height: drawH / 2
+        };
+
+        if (!isWallCollision(testRect)) {
+            gameState.x = nextX;
+            gameState.y = nextY;
+        }
+    }
+
+    // 邊界檢查 (維持作為備用保護)
     if (gameState.x < -drawW/2) gameState.x = -drawW/2;
     if (gameState.x > W - drawW/2) gameState.x = W - drawW/2;
     if (gameState.y < -drawH/2) gameState.y = -drawH/2;
@@ -331,14 +359,17 @@ function update(timestamp) {
         if (enemy.active) {
             // 怪物自主移動
             if (enemy.type === 'monster') {
+                // X 軸移動與碰撞
                 enemy.x += enemy.vx;
-                enemy.y += enemy.vy;
-
-                // 邊界碰撞反彈
-                if (enemy.x <= 0 || enemy.x + enemy.width >= W) {
+                if (isWallCollision(enemy) || enemy.x <= 0 || enemy.x + enemy.width >= W) {
+                    enemy.x -= enemy.vx;
                     enemy.vx *= -1;
                 }
-                if (enemy.y <= 0 || enemy.y + enemy.height >= H) {
+
+                // Y 軸移動與碰撞
+                enemy.y += enemy.vy;
+                if (isWallCollision(enemy) || enemy.y <= 0 || enemy.y + enemy.height >= H) {
+                    enemy.y -= enemy.vy;
                     enemy.vy *= -1;
                 }
 
@@ -373,7 +404,7 @@ function update(timestamp) {
 
     if (allCleared && gameState.enemies.length > 0) {
         gameState.level += 1;
-        bgPattern = createBackgroundPattern(gameState.level);
+        generateMap(gameState.level);
         spawnEnemies(5);
         updateHUD();
     }
@@ -386,8 +417,50 @@ function loop(timestamp) {
 }
 
 function draw() {
-    ctx.fillStyle = bgPattern;
-    ctx.fillRect(0, 0, W, H);
+    // 繪製地圖網格與障礙物
+    for (let r = 0; r < gameState.rows; r++) {
+        for (let c = 0; c < gameState.cols; c++) {
+            const tileX = c * TILE_SIZE;
+            const tileY = r * TILE_SIZE;
+
+            // 地板顏色
+            if (gameState.level === 1) {
+                ctx.fillStyle = '#4CAF50';
+            } else if (gameState.level === 2) {
+                ctx.fillStyle = '#F5DEB3';
+            } else {
+                ctx.fillStyle = '#2F4F4F';
+            }
+            ctx.fillRect(tileX, tileY, TILE_SIZE, TILE_SIZE);
+
+            if (gameState.map[r] && gameState.map[r][c] === 1) {
+                let obstacleIcon = '🌲';
+                if (gameState.level === 2) {
+                    obstacleIcon = (r + c) % 2 === 0 ? '🌊' : '🪨';
+                } else if (gameState.level > 2) {
+                    obstacleIcon = '🧱';
+                }
+                const obstacleSprite = getEmojiSprite(obstacleIcon);
+                if (obstacleSprite && obstacleSprite.complete) {
+                    ctx.drawImage(obstacleSprite, tileX, tileY, TILE_SIZE, TILE_SIZE);
+                }
+            }
+
+            // Draw floor checkerboard pattern slightly to give depth
+            if (gameState.map[r] && gameState.map[r][c] === 0) {
+                if (gameState.level === 1) {
+                    ctx.fillStyle = '#45a049';
+                } else if (gameState.level === 2) {
+                    ctx.fillStyle = '#E6C280';
+                } else {
+                    ctx.fillStyle = '#3F5F5F';
+                }
+                if ((r + c) % 2 === 0) {
+                   ctx.fillRect(tileX, tileY, TILE_SIZE, TILE_SIZE);
+                }
+            }
+        }
+    }
 
     // 畫出敵人
     for (let enemy of gameState.enemies) {
