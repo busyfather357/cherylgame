@@ -371,7 +371,7 @@ function draw() {
     ctx.fillRect(0, 0, W, H);
 
     // 畫出敵人
-    ctx.font = "40px Arial";
+    ctx.font = "40px 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji', 'Android Emoji', EmojiSymbols, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     for (let enemy of gameState.enemies) {
