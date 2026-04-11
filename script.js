@@ -346,7 +346,8 @@ sprite.onload = () => {
             const b = data[i + 2];
 
             // 假設背景是白色或淺灰色 (可依實際情況調整閾值)
-            if (r > 245 && g > 245 && b > 245) {
+            if (r > 210 && g > 210 && b > 210 &&
+                Math.abs(r - g) < 20 && Math.abs(r - b) < 20 && Math.abs(g - b) < 20) {
                 data[i + 3] = 0; // Alpha = 0 (透明)
             }
         }
@@ -679,12 +680,6 @@ function draw() {
     }
     
     ctx.restore();
-
-    // 文字說明
-    ctx.fillStyle = "white";
-    ctx.font = "14px Arial";
-    ctx.fillText("紅框應剛好包住角色", 10, 20);
-    ctx.fillText("若不合，請調整 frameWidth", 10, 40);
 }
 
 // --- 6. Math Challenge Logic ---
