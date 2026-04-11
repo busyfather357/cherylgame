@@ -1,5 +1,6 @@
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
+ctx.imageSmoothingEnabled = false;
 
 const TILE_SIZE = 50;
 
@@ -329,6 +330,7 @@ sprite.onload = () => {
         offCanvas.width = sprite.width;
         offCanvas.height = sprite.height;
         const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
+        offCtx.imageSmoothingEnabled = false;
 
         // 將原圖畫上離線畫布
         offCtx.drawImage(sprite, 0, 0);
@@ -563,6 +565,7 @@ function loop(timestamp) {
 }
 
 function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     // 繪製地圖網格與障礙物
     for (let r = 0; r < gameState.rows; r++) {
         for (let c = 0; c < gameState.cols; c++) {
@@ -613,14 +616,14 @@ function draw() {
         if (enemy.active) {
             // 改用 drawImage 繪製已經轉換好的 SVG Emoji 圖片
             if (enemy.spriteImg && enemy.spriteImg.complete) {
-                ctx.drawImage(enemy.spriteImg, enemy.x, enemy.y, enemy.width, enemy.height);
+                ctx.drawImage(enemy.spriteImg, Math.floor(enemy.x), Math.floor(enemy.y), Math.floor(enemy.width), Math.floor(enemy.height));
             }
 
             // 繪製敵人紅框 (除錯用)
             if (gameConfig.showDebugBox) {
                 ctx.strokeStyle = "blue";
                 ctx.lineWidth = 2;
-                ctx.strokeRect(enemy.x, enemy.y, enemy.width, enemy.height);
+                ctx.strokeRect(Math.floor(enemy.x), Math.floor(enemy.y), Math.floor(enemy.width), Math.floor(enemy.height));
             }
         }
     }
@@ -630,7 +633,7 @@ function draw() {
         if (bullet.active) {
             const bulletSprite = getEmojiSprite('🔥');
             if (bulletSprite && bulletSprite.complete) {
-                ctx.drawImage(bulletSprite, bullet.x, bullet.y, bullet.width, bullet.height);
+                ctx.drawImage(bulletSprite, Math.floor(bullet.x), Math.floor(bullet.y), Math.floor(bullet.width), Math.floor(bullet.height));
             }
         }
     }
@@ -656,7 +659,7 @@ function draw() {
     ctx.save();
     
     // 將座標系統原點移至角色中心，以便翻轉
-    ctx.translate(dx + drawW / 2, dy + drawH / 2);
+    ctx.translate(Math.floor(dx + drawW / 2), Math.floor(dy + drawH / 2));
     if (gameState.facingLeft) {
         ctx.scale(-1, 1);
     }
@@ -665,14 +668,14 @@ function draw() {
     ctx.drawImage(
         processedSpriteCanvas || sprite,
         Math.floor(sx), Math.floor(sy), Math.floor(gameConfig.frameWidth), Math.floor(gameConfig.frameHeight),
-        -drawW / 2, -drawH / 2, drawW, drawH
+        Math.floor(-drawW / 2), Math.floor(-drawH / 2), Math.floor(drawW), Math.floor(drawH)
     );
 
     // 繪製紅框 (除錯用)
     if (gameConfig.showDebugBox) {
         ctx.strokeStyle = "red";
         ctx.lineWidth = 2;
-        ctx.strokeRect(-drawW / 2, -drawH / 2, drawW, drawH);
+        ctx.strokeRect(Math.floor(-drawW / 2), Math.floor(-drawH / 2), Math.floor(drawW), Math.floor(drawH));
     }
     
     ctx.restore();
