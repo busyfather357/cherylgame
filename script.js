@@ -831,6 +831,9 @@ function checkAnswer(selected, correct) {
 
         setTimeout(() => {
             modalOverlay.style.display = "none";
+            for (let key in keys) {
+                keys[key] = false;
+            }
             gameState.paused = false;
             isAnswering = false;
             updateHUD();
@@ -842,14 +845,33 @@ function checkAnswer(selected, correct) {
 
         // Knockback logic - for bullet or general knockback, we can just bounce down
         // If it was a monster/boss, we could bounce relative to them, but bounce down is the current existing behavior
-        gameState.y += 100; // Bounce down
+        const drawW = gameConfig.drawWidth;
+        const drawH = gameConfig.drawHeight;
+
+        let knockbackDist = 100;
+        let step = 5;
+        for (let i = 0; i < knockbackDist; i += step) {
+            let testRect = {
+                x: gameState.x + (drawW / 4),
+                y: gameState.y + step + (drawH / 4),
+                width: drawW / 2,
+                height: drawH / 2
+            };
+            if (!isWallCollision(testRect)) {
+                gameState.y += step;
+            } else {
+                break; // 撞到牆壁，立刻停止擊退
+            }
+        }
 
         // Ensure within bounds after knockback
-        const drawH = gameConfig.drawHeight;
         if (gameState.y > H - drawH/2) gameState.y = H - drawH/2;
 
         setTimeout(() => {
             modalOverlay.style.display = "none";
+            for (let key in keys) {
+                keys[key] = false;
+            }
             gameState.paused = false;
             isAnswering = false;
             updateHUD();
