@@ -179,7 +179,7 @@ function getEmojiSprite(emoji) {
 function spawnEnemies(count) {
     gameState.enemies = [];
     for (let i = 0; i < count; i++) {
-        let isMonster = Math.random() > 0.5;
+        let isMonster = i !== 0; // Fix: Only 1 chest, others are monsters
         let type = isMonster ? 'monster' : 'chest';
         let icon = '🎁';
         let vx = 0;
