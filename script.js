@@ -59,6 +59,9 @@ const gameState = {
     level: 1,
     paused: false,
     enemies: [],
+    bullets: [],
+    bossHitsNeeded: 5,
+    currentChallengeType: null,
     map: [],
     cols: 0,
     rows: 0
@@ -178,27 +181,12 @@ function getEmojiSprite(emoji) {
 
 function spawnEnemies(count) {
     gameState.enemies = [];
-    for (let i = 0; i < count; i++) {
-        let isMonster = i !== 0; // Fix: Only 1 chest, others are monsters
-        let type = isMonster ? 'monster' : 'chest';
-        let icon = '🎁';
-        let vx = 0;
-        let vy = 0;
+    gameState.bullets = [];
 
-        if (isMonster) {
-            vx = (Math.random() * 2) - 1; // between -1 and 1
-            vy = (Math.random() * 2) - 1;
+    const isBossLevel = gameState.level % 5 === 0;
 
-            if (gameState.level === 1) {
-                icon = '👾';
-            } else if (gameState.level === 2) {
-                icon = Math.random() > 0.5 ? '🦀' : '🦈';
-            } else {
-                const icons = ['👾', '🦀', '🦈'];
-                icon = icons[Math.floor(Math.random() * icons.length)];
-            }
-        }
-
+    if (isBossLevel) {
+        gameState.bossHitsNeeded = 5;
         let spawnX, spawnY;
         let attempts = 0;
         let placed = false;
@@ -215,18 +203,75 @@ function spawnEnemies(count) {
         }
 
         if (placed) {
+            const icon = Math.random() > 0.5 ? '🐉' : '👹';
+            const vx = (Math.random() * 3) - 1.5;
+            const vy = (Math.random() * 3) - 1.5;
+
             gameState.enemies.push({
                 x: spawnX,
                 y: spawnY,
                 width: 50,
                 height: 50,
-                type: type,
+                type: 'boss',
                 icon: icon,
-                spriteImg: getEmojiSprite(icon), // 新增這行：預先產生並儲存圖片物件
+                spriteImg: getEmojiSprite(icon),
                 vx: vx,
                 vy: vy,
-                active: true
+                active: true,
+                lastShotTime: 0
             });
+        }
+    } else {
+        for (let i = 0; i < count; i++) {
+            let isMonster = i !== 0; // Fix: Only 1 chest, others are monsters
+            let type = isMonster ? 'monster' : 'chest';
+            let icon = '🎁';
+            let vx = 0;
+            let vy = 0;
+
+            if (isMonster) {
+                vx = (Math.random() * 2) - 1; // between -1 and 1
+                vy = (Math.random() * 2) - 1;
+
+                if (gameState.level === 1) {
+                    icon = '👾';
+                } else if (gameState.level === 2) {
+                    icon = Math.random() > 0.5 ? '🦀' : '🦈';
+                } else {
+                    const icons = ['👾', '🦀', '🦈'];
+                    icon = icons[Math.floor(Math.random() * icons.length)];
+                }
+            }
+
+            let spawnX, spawnY;
+            let attempts = 0;
+            let placed = false;
+            while (!placed && attempts < 100) {
+                const r = Math.floor(Math.random() * (gameState.rows - 2)) + 1;
+                const c = Math.floor(Math.random() * (gameState.cols - 2)) + 1;
+
+                if (gameState.map[r] && gameState.map[r][c] === 0) {
+                    spawnX = c * TILE_SIZE;
+                    spawnY = r * TILE_SIZE;
+                    placed = true;
+                }
+                attempts++;
+            }
+
+            if (placed) {
+                gameState.enemies.push({
+                    x: spawnX,
+                    y: spawnY,
+                    width: 50,
+                    height: 50,
+                    type: type,
+                    icon: icon,
+                    spriteImg: getEmojiSprite(icon), // 新增這行：預先產生並儲存圖片物件
+                    vx: vx,
+                    vy: vy,
+                    active: true
+                });
+            }
         }
     }
 }
@@ -406,8 +451,10 @@ function update(timestamp) {
         let enemy = gameState.enemies[i];
 
         if (enemy.active) {
-            // 怪物自主移動
-            if (enemy.type === 'monster') {
+            // 怪物或魔王自主移動
+            if (enemy.type === 'monster' || enemy.type === 'boss') {
+                const maxSpeed = enemy.type === 'boss' ? 2.5 : 1.5;
+
                 // X 軸移動與碰撞
                 enemy.x += enemy.vx;
                 if (isWallCollision(enemy) || enemy.x <= 0 || enemy.x + enemy.width >= W) {
@@ -428,16 +475,66 @@ function update(timestamp) {
                     enemy.vy += (Math.random() * 0.5) - 0.25;
 
                     // 限制最大速度
-                    enemy.vx = Math.max(-1.5, Math.min(1.5, enemy.vx));
-                    enemy.vy = Math.max(-1.5, Math.min(1.5, enemy.vy));
+                    enemy.vx = Math.max(-maxSpeed, Math.min(maxSpeed, enemy.vx));
+                    enemy.vy = Math.max(-maxSpeed, Math.min(maxSpeed, enemy.vy));
+                }
+
+                // 魔王發射子彈
+                if (enemy.type === 'boss' && (!enemy.lastShotTime || timestamp - enemy.lastShotTime > 1500)) {
+                    enemy.lastShotTime = timestamp;
+
+                    const bossCenterX = enemy.x + enemy.width / 2;
+                    const bossCenterY = enemy.y + enemy.height / 2;
+                    const playerCenterX = playerRect.x + playerRect.width / 2;
+                    const playerCenterY = playerRect.y + playerRect.height / 2;
+
+                    const dx = playerCenterX - bossCenterX;
+                    const dy = playerCenterY - bossCenterY;
+                    const dist = Math.hypot(dx, dy);
+
+                    const bulletSpeed = 4;
+
+                    gameState.bullets.push({
+                        x: bossCenterX - 15, // center 30x30 bullet
+                        y: bossCenterY - 15,
+                        width: 30,
+                        height: 30,
+                        vx: (dx / dist) * bulletSpeed,
+                        vy: (dy / dist) * bulletSpeed,
+                        active: true
+                    });
                 }
             }
 
             if (checkCollision(playerRect, enemy)) {
                 gameState.paused = true;
                 gameState.currentEnemyIndex = i;
+                gameState.currentChallengeType = enemy.type;
                 triggerMathChallenge();
                 break;
+            }
+        }
+    }
+
+    // 更新子彈位置與碰撞
+    for (let i = gameState.bullets.length - 1; i >= 0; i--) {
+        let bullet = gameState.bullets[i];
+        if (bullet.active) {
+            bullet.x += bullet.vx;
+            bullet.y += bullet.vy;
+
+            // 飛出邊界移除
+            if (bullet.x < 0 || bullet.x > W || bullet.y < 0 || bullet.y > H || isWallCollision(bullet)) {
+                gameState.bullets.splice(i, 1);
+                continue;
+            }
+
+            if (checkCollision(playerRect, bullet)) {
+                gameState.bullets.splice(i, 1);
+                gameState.paused = true;
+                gameState.currentChallengeType = 'bullet';
+                triggerMathChallenge();
+                break; // One bullet collision at a time
             }
         }
     }
@@ -524,6 +621,16 @@ function draw() {
                 ctx.strokeStyle = "blue";
                 ctx.lineWidth = 2;
                 ctx.strokeRect(enemy.x, enemy.y, enemy.width, enemy.height);
+            }
+        }
+    }
+
+    // 畫出子彈
+    for (let bullet of gameState.bullets) {
+        if (bullet.active) {
+            const bulletSprite = getEmojiSprite('🔥');
+            if (bulletSprite && bulletSprite.complete) {
+                ctx.drawImage(bulletSprite, bullet.x, bullet.y, bullet.width, bullet.height);
             }
         }
     }
@@ -692,8 +799,35 @@ function checkAnswer(selected, correct) {
     if (selected === correct) {
         feedbackEl.style.color = "green";
         feedbackEl.textContent = "Correct! ✨";
-        gameState.score += 10;
-        gameState.enemies[gameState.currentEnemyIndex].active = false;
+
+        if (gameState.currentChallengeType === 'bullet') {
+            // No score change
+        } else if (gameState.currentChallengeType === 'boss') {
+            gameState.score += 10;
+            gameState.bossHitsNeeded -= 1;
+
+            if (gameState.bossHitsNeeded > 0) {
+                // Teleport boss
+                let boss = gameState.enemies[gameState.currentEnemyIndex];
+                let placed = false;
+                let attempts = 0;
+                while (!placed && attempts < 100) {
+                    const r = Math.floor(Math.random() * (gameState.rows - 2)) + 1;
+                    const c = Math.floor(Math.random() * (gameState.cols - 2)) + 1;
+                    if (gameState.map[r] && gameState.map[r][c] === 0) {
+                        boss.x = c * TILE_SIZE;
+                        boss.y = r * TILE_SIZE;
+                        placed = true;
+                    }
+                    attempts++;
+                }
+            } else {
+                gameState.enemies[gameState.currentEnemyIndex].active = false;
+            }
+        } else {
+            gameState.score += 10;
+            gameState.enemies[gameState.currentEnemyIndex].active = false;
+        }
 
         setTimeout(() => {
             modalOverlay.style.display = "none";
@@ -706,7 +840,8 @@ function checkAnswer(selected, correct) {
         feedbackEl.textContent = "Oops! Try again later.";
         gameState.hp -= 1;
 
-        // Knockback logic
+        // Knockback logic - for bullet or general knockback, we can just bounce down
+        // If it was a monster/boss, we could bounce relative to them, but bounce down is the current existing behavior
         gameState.y += 100; // Bounce down
 
         // Ensure within bounds after knockback
@@ -725,6 +860,7 @@ function checkAnswer(selected, correct) {
                 gameState.score = 0;
                 gameState.x = Math.floor(gameState.cols / 2) * TILE_SIZE;
                 gameState.y = Math.floor(gameState.rows / 2) * TILE_SIZE;
+                gameState.level = 1;
                 spawnEnemies(5);
                 updateHUD();
             }
