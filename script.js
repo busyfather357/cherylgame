@@ -479,8 +479,8 @@ function update(timestamp) {
                     enemy.vy = Math.max(-maxSpeed, Math.min(maxSpeed, enemy.vy));
                 }
 
-                // 魔王發射子彈
-                if (enemy.type === 'boss' && (!enemy.lastShotTime || timestamp - enemy.lastShotTime > 1500)) {
+                // 魔王發射子彈 (間隔改為 5000ms)
+                if (enemy.type === 'boss' && (!enemy.lastShotTime || timestamp - enemy.lastShotTime > 5000)) {
                     enemy.lastShotTime = timestamp;
 
                     const bossCenterX = enemy.x + enemy.width / 2;
