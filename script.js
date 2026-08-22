@@ -65,7 +65,10 @@ const gameState = {
     currentChallengeType: null,
     map: [],
     cols: 0,
-    rows: 0
+    rows: 0,
+    inventory: { potion: 0, boots: 0, scroll: 0, shield: 0 },
+    speedBoostUntil: 0,
+    invincibleUntil: 0
 };
 
 function checkMapConnectivity(map, startCol, startRow) {
@@ -145,7 +148,13 @@ function generateMap(level) {
 }
 
 const keys = {};
-window.addEventListener("keydown", (e) => { keys[e.code] = true; });
+window.addEventListener("keydown", (e) => {
+    keys[e.code] = true;
+    if (e.code === 'Digit1') useItem('potion');
+    if (e.code === 'Digit2') useItem('boots');
+    if (e.code === 'Digit3') useItem('scroll');
+    if (e.code === 'Digit4') useItem('shield');
+});
 window.addEventListener("keyup", (e) => { keys[e.code] = false; });
 
 // 綁定虛擬按鍵
@@ -160,6 +169,66 @@ bindTouch("btn-down", "ArrowDown");
 bindTouch("btn-left", "ArrowLeft");
 bindTouch("btn-right", "ArrowRight");
 bindTouch("btn-action", "Space"); // Optional action button
+
+const bindItemTouch = (id, itemName) => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        useItem(itemName);
+    });
+};
+bindItemTouch("btn-item-1", "potion");
+bindItemTouch("btn-item-2", "boots");
+bindItemTouch("btn-item-3", "scroll");
+bindItemTouch("btn-item-4", "shield");
+
+function useItem(itemName) {
+    if (gameState.inventory[itemName] <= 0) return;
+
+    const timestamp = performance.now();
+    let used = false;
+
+    if (itemName === 'potion' && gameState.hp < 3) {
+        gameState.hp += 1;
+        used = true;
+    } else if (itemName === 'boots') {
+        gameState.speedBoostUntil = timestamp + 5000;
+        used = true;
+    } else if (itemName === 'shield') {
+        gameState.invincibleUntil = timestamp + 5000;
+        used = true;
+    } else if (itemName === 'scroll' && gameState.paused) {
+        const modalOverlay = document.getElementById("math-modal-overlay");
+        if (modalOverlay.style.display === "flex") {
+            const answersContainer = document.getElementById("answers-container");
+            const btns = answersContainer.getElementsByClassName("answer-btn");
+
+            // Find correct answer from feedback context or parse from buttons
+            // Here we can find wrong buttons and disable 2 of them
+            let wrongBtns = [];
+            for (let btn of btns) {
+                // To identify correct answer safely, we could parse the question but simple string eval is tricky
+                // Alternatively, we can inject a data-correct attribute when generating answers
+                if (btn.dataset.correct !== "true" && btn.style.visibility !== "hidden") {
+                    wrongBtns.push(btn);
+                }
+            }
+
+            // Hide up to 2 wrong answers
+            wrongBtns.sort(() => Math.random() - 0.5);
+            for (let i = 0; i < Math.min(2, wrongBtns.length); i++) {
+                wrongBtns[i].style.visibility = "hidden";
+            }
+            used = true;
+        }
+    }
+
+    if (used) {
+        gameState.inventory[itemName] -= 1;
+        updateHUD();
+    }
+}
 
 // --- 3. 敵人與碰撞邏輯 ---
 
@@ -374,6 +443,14 @@ function update(timestamp) {
         return;
     }
 
+    if (timestamp < gameState.speedBoostUntil) {
+        gameState.speed = 6;
+    } else {
+        gameState.speed = 3;
+    }
+
+    const isInvincible = timestamp < gameState.invincibleUntil;
+
     let isMoving = false;
     let nextX = gameState.x;
     let nextY = gameState.y;
@@ -510,11 +587,15 @@ function update(timestamp) {
             }
 
             if (checkCollision(playerRect, enemy)) {
-                gameState.paused = true;
-                gameState.currentEnemyIndex = i;
-                gameState.currentChallengeType = enemy.type;
-                triggerMathChallenge();
-                break;
+                if (isInvincible && enemy.type === 'monster') {
+                    // Skip collision
+                } else {
+                    gameState.paused = true;
+                    gameState.currentEnemyIndex = i;
+                    gameState.currentChallengeType = enemy.type;
+                    triggerMathChallenge();
+                    break;
+                }
             }
         }
     }
@@ -533,11 +614,13 @@ function update(timestamp) {
             }
 
             if (checkCollision(playerRect, bullet)) {
-                gameState.bullets.splice(i, 1);
-                gameState.paused = true;
-                gameState.currentChallengeType = 'bullet';
-                triggerMathChallenge();
-                break; // One bullet collision at a time
+                if (!isInvincible) {
+                    gameState.bullets.splice(i, 1);
+                    gameState.paused = true;
+                    gameState.currentChallengeType = 'bullet';
+                    triggerMathChallenge();
+                    break; // One bullet collision at a time
+                }
             }
         }
     }
@@ -672,6 +755,21 @@ function draw() {
         Math.floor(-drawW / 2), Math.floor(-drawH / 2), Math.floor(drawW), Math.floor(drawH)
     );
 
+    const timestamp = performance.now();
+    if (timestamp < gameState.invincibleUntil) {
+        ctx.strokeStyle = "gold";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, 0, Math.floor(drawW / 1.5), 0, Math.PI * 2);
+        ctx.stroke();
+    } else if (timestamp < gameState.speedBoostUntil) {
+        ctx.strokeStyle = "cyan";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, Math.floor(drawW / 1.5), 0, Math.PI * 2);
+        ctx.stroke();
+    }
+
     // 繪製紅框 (除錯用)
     if (gameConfig.showDebugBox) {
         ctx.strokeStyle = "red";
@@ -731,6 +829,9 @@ function triggerMathChallenge() {
         const btn = document.createElement("button");
         btn.className = "answer-btn";
         btn.textContent = ans;
+        if (ans === correctAnswer) {
+            btn.dataset.correct = "true";
+        }
         btn.onclick = () => checkAnswer(ans, correctAnswer);
         answersContainer.appendChild(btn);
     });
@@ -783,6 +884,17 @@ function updateHUD() {
     if (scoreDisplayCache.textContent !== expectedScore) {
         scoreDisplayCache.textContent = expectedScore;
     }
+
+    // Update Inventory
+    const invPotion = document.getElementById("inv-potion");
+    const invBoots = document.getElementById("inv-boots");
+    const invScroll = document.getElementById("inv-scroll");
+    const invShield = document.getElementById("inv-shield");
+
+    if (invPotion) invPotion.textContent = `🧪 x${gameState.inventory.potion}`;
+    if (invBoots) invBoots.textContent = `🥾 x${gameState.inventory.boots}`;
+    if (invScroll) invScroll.textContent = `📜 x${gameState.inventory.scroll}`;
+    if (invShield) invShield.textContent = `🛡️ x${gameState.inventory.shield}`;
 }
 
 let isAnswering = false;
@@ -825,6 +937,14 @@ function checkAnswer(selected, correct) {
         } else {
             gameState.score += 10;
             gameState.enemies[gameState.currentEnemyIndex].active = false;
+
+            if (gameState.currentChallengeType === 'chest') {
+                const items = ['potion', 'boots', 'scroll', 'shield'];
+                const itemNames = { 'potion': '恢復藥水', 'boots': '神速靴', 'scroll': '提示卷軸', 'shield': '無敵護盾' };
+                const drop = items[Math.floor(Math.random() * items.length)];
+                gameState.inventory[drop] += 1;
+                feedbackEl.textContent = `Correct! ✨ Obtained 1x ${itemNames[drop]}`;
+            }
         }
 
         setTimeout(() => {

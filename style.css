@@ -18,6 +18,8 @@
             right: 10px;
             display: flex;
             justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
             pointer-events: none;
             z-index: 10;
             text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
@@ -28,6 +30,19 @@
         .hp-container {
             display: flex;
             gap: 5px;
+        }
+        #inventory-bar {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 10px;
+            font-size: 20px;
+        }
+        .inv-item {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 2px 8px;
+            border-radius: 8px;
         }
         .heart { color: #ff4d4d; }
         .level { color: #87cefa; }
@@ -94,6 +109,29 @@
             user-select: none;
         }
         .action-btn:active { background: rgba(255, 215, 0, 0.9); }
+
+        /* Mobile Item Buttons */
+        .item-btn-container {
+            position: absolute;
+            bottom: 100px;
+            right: 0;
+            display: flex;
+            gap: 10px;
+        }
+        .item-btn {
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 255, 255, 0.6);
+            border: 2px solid rgba(0,0,0,0.3);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            pointer-events: auto;
+            user-select: none;
+        }
+        .item-btn:active { background: rgba(255, 255, 255, 0.9); }
 
         @media (hover: none) and (pointer: coarse) {
             #mobile-controls { display: block; }
