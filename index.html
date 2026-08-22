@@ -1,47 +1,92 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:;">
-    <title>RPG Math Challenge</title>
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
-    <div id="hud">
-        <div class="hp-container" id="hp-display">
-            <span class="heart">❤️</span>
-            <span class="heart">❤️</span>
-            <span class="heart">❤️</span>
-        </div>
-        <div class="level" id="level-display">Level: 1</div>
-        <div class="score" id="score-display">Score: 0</div>
-    </div>
+<!DOCTYPE html> 
+<html lang="en"> 
+<head>     
+    <meta charset="UTF-8">     
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">     
+    
+    <!-- 更新 CSP 規則以允許 Google Analytics 與 Tag Manager 執行 -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://www.google-analytics.com https://www.googletagmanager.com; connect-src 'self' https://www.google-analytics.com;">     
+    
+    <!-- SEO：優化標題與 Meta 描述 -->
+    <title>RPG 數學挑戰：木木島趣味練習場 | RPG Math Challenge</title>
+    <meta name="description" content="加入木木島的 RPG 數學挑戰！透過趣味的勇者冒險遊戲，讓孩子練習加減乘法。木木公主專屬的數學沙灘訓練場，讓學習數學變得好玩又刺激。">
+    <meta name="keywords" content="數學遊戲, RPG數學, Math Game, 親子共學, 兒童數學練習, 加減乘法練習">
+    
+    <!-- SEO：標準網址防重複 (已更新為新網址) -->
+    <link rel="canonical" href="https://mathrpg.mumuisland.com/index.html">
 
-    <div id="mobile-controls">
-        <div class="dpad">
+    <!-- SEO & 社群分享：Open Graph 標籤 (已更新為新網址) -->
+    <meta property="og:title" content="RPG 數學挑戰：木木島趣味練習場">
+    <meta property="og:description" content="勇者，準備好接受數學挑戰了嗎？擊敗怪物並解開謎題，讓練習數學變成一場大冒險！">
+    <meta property="og:image" content="https://mathrpg.mumuisland.com/screenshot.png"> 
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://mathrpg.mumuisland.com/index.html">
+
+    <!-- AEO：結構化資料 (Schema.org JSON-LD) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "RPG Math Challenge",
+      "operatingSystem": "Web",
+      "applicationCategory": "GameApplication",
+      "genre": "Educational Game",
+      "description": "這是一款結合 RPG 角色扮演與數學運算的教育遊戲，旨在幫助兒童透過遊戲化學習提升數學運算能力。",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "TWD"
+      },
+      "author": {
+        "@type": "Person",
+        "name": "加班爸爸"
+      }
+    }
+    </script>
+
+    <!-- Google Analytics (GA4) 追蹤 -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-SNXESQ5BC1"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-SNXESQ5BC1');
+    </script>
+
+    <link rel="stylesheet" href="style.css"> 
+</head> 
+<body>     
+    <div id="hud">         
+        <div class="hp-container" id="hp-display">             
+            <span class="heart">❤️</span>
+            <span class="heart">❤️</span>
+            <span class="heart">❤️</span>     
+        </div>         
+        <div class="level" id="level-display">Level: 1</div>         
+        <div class="score" id="score-display">Score: 0</div>     
+    </div>     
+    <div id="mobile-controls">         
+        <div class="dpad">             
             <div class="dpad-btn" id="btn-up">⬆️</div>
             <div class="dpad-btn" id="btn-down">⬇️</div>
             <div class="dpad-btn" id="btn-left">⬅️</div>
-            <div class="dpad-btn" id="btn-right">➡️</div>
-        </div>
-        <div class="action-btn-container">
-            <div class="action-btn" id="btn-action">Action</div>
-        </div>
-    </div>
-
-    <div id="math-modal-overlay">
-        <div id="math-modal">
-            <h2 id="math-title">Math Challenge!</h2>
-            <div id="math-question">5 + 7 = ?</div>
-            <div class="answers-grid" id="answers-container">
-                <!-- Answer buttons will be generated here -->
-            </div>
-            <div id="math-feedback"></div>
-        </div>
-    </div>
-
-    <canvas id="game"></canvas>
-    <script src="script.js"></script>
-</body>
+            <div class="dpad-btn" id="btn-right">➡️</div>     
+        </div>         
+        <div class="action-btn-container">             
+            <div class="action-btn" id="btn-action">Action</div>         
+        </div>     
+    </div>     
+    <div id="math-modal-overlay">         
+        <div id="math-modal">             
+            <h2 id="math-title">Math Challenge!</h2>             
+            <div id="math-question">5 + 7 = ?</div>             
+            <div class="answers-grid" id="answers-container">                 
+                <!-- Answer buttons will be generated here -->             
+            </div>             
+            <div id="math-feedback"></div>         
+        </div>     
+    </div>     
+    <canvas id="game"></canvas>     
+    <script src="script.js"></script> 
+</body> 
 </html>
