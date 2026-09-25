@@ -189,6 +189,21 @@
         }
         .answer-btn:hover { background: #f5deb3; }
         .answer-btn:active { transform: scale(0.95); background: #deb887; }
+        .restart-btn { grid-column: 1 / -1; }
+
+        .hint-btn {
+            margin-top: 15px;
+            background: #e6f0ff;
+            border: 3px solid #6a8fd6;
+            border-radius: 12px;
+            padding: 8px 16px;
+            font-size: 18px;
+            font-family: inherit;
+            font-weight: bold;
+            color: #2f4f8f;
+            cursor: pointer;
+        }
+        .hint-btn:active { transform: scale(0.95); }
 
         #math-feedback {
             margin-top: 15px;

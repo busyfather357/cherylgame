@@ -3,6 +3,11 @@ const ctx = canvas.getContext("2d");
 ctx.imageSmoothingEnabled = false;
 
 const TILE_SIZE = 50;
+const MAX_HP = 3;
+const FRAME_MS = 1000 / 60;          // 移動數值以 60fps 為基準
+const MAX_DT = 3;                    // 單格畫面最多補 3 格 (避免切換分頁回來瞬移)
+const POST_CHALLENGE_GRACE_MS = 1500; // 答題結束後的短暫保護時間
+const SPAWN_SAFE_RADIUS = 2;         // 敵人不可生成在玩家周圍 N 格內
 
 // --- 1. 初始化畫布 ---
 let W = window.innerWidth;
@@ -21,8 +26,23 @@ function resizeCanvas() {
     ctx.imageSmoothingEnabled = false;
 }
 
-window.addEventListener('resize', resizeCanvas);
-window.addEventListener('orientationchange', resizeCanvas);
+let resizeTimer = null;
+function handleResize() {
+    resizeCanvas();
+    // 關卡還沒發生任何碰撞時，依新視窗大小重建地圖；否則維持地圖、只縮放畫面
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+        const cols = Math.max(5, Math.floor(W / TILE_SIZE));
+        const rows = Math.max(5, Math.floor(H / TILE_SIZE));
+        const sizeChanged = cols !== gameState.cols || rows !== gameState.rows;
+        if (sizeChanged && !gameState.levelTouched && !gameState.paused) {
+            startLevel();
+        }
+    }, 250);
+}
+
+window.addEventListener('resize', handleResize);
+window.addEventListener('orientationchange', handleResize);
 resizeCanvas(); // Initial call
 
 
@@ -66,9 +86,17 @@ const gameState = {
     map: [],
     cols: 0,
     rows: 0,
+    worldW: 0, // 地圖實際像素寬高 (與視窗大小脫鉤)
+    worldH: 0,
     inventory: { potion: 0, boots: 0, scroll: 0, shield: 0 },
     speedBoostUntil: 0,
-    invincibleUntil: 0
+    invincibleUntil: 0,
+    graceUntil: 0,
+    lastUpdateTime: 0,
+    challengeSource: null,
+    hintUsed: false,
+    gameOver: false,
+    levelTouched: false // 本關是否已觸發過題目
 };
 
 function checkMapConnectivity(map, startCol, startRow) {
@@ -110,8 +138,11 @@ function checkMapConnectivity(map, startCol, startRow) {
 }
 
 function generateMap(level) {
-    gameState.cols = Math.ceil(W / TILE_SIZE);
-    gameState.rows = Math.ceil(H / TILE_SIZE);
+    // 地圖大小只在產生關卡時依視窗決定，之後視窗縮放只改變繪製比例
+    gameState.cols = Math.max(5, Math.floor(W / TILE_SIZE));
+    gameState.rows = Math.max(5, Math.floor(H / TILE_SIZE));
+    gameState.worldW = gameState.cols * TILE_SIZE;
+    gameState.worldH = gameState.rows * TILE_SIZE;
 
     // Center spawn point
     const centerX = Math.floor(gameState.cols / 2);
@@ -145,6 +176,29 @@ function generateMap(level) {
 
     gameState.x = centerX * TILE_SIZE;
     gameState.y = centerY * TILE_SIZE;
+}
+
+function getPlayerTile() {
+    return {
+        c: Math.floor((gameState.x + gameConfig.drawWidth / 2) / TILE_SIZE),
+        r: Math.floor((gameState.y + gameConfig.drawHeight / 2) / TILE_SIZE)
+    };
+}
+
+// 找一個可生成的地板格；優先避開玩家周圍，地圖太小找不到時才放寬限制
+function findSpawnTile() {
+    const player = getPlayerTile();
+    for (const safeRadius of [SPAWN_SAFE_RADIUS, 0]) {
+        for (let attempts = 0; attempts < 100; attempts++) {
+            const r = Math.floor(Math.random() * (gameState.rows - 2)) + 1;
+            const c = Math.floor(Math.random() * (gameState.cols - 2)) + 1;
+            const nearPlayer = Math.abs(r - player.r) <= safeRadius && Math.abs(c - player.c) <= safeRadius;
+            if (gameState.map[r] && gameState.map[r][c] === 0 && !nearPlayer) {
+                return { x: c * TILE_SIZE, y: r * TILE_SIZE };
+            }
+        }
+    }
+    return null;
 }
 
 const keys = {};
@@ -183,13 +237,23 @@ bindItemTouch("btn-item-2", "boots");
 bindItemTouch("btn-item-3", "scroll");
 bindItemTouch("btn-item-4", "shield");
 
+// 題目視窗內的提示卷軸按鈕 (手機的道具列會被視窗遮住，所以放在視窗裡)
+document.getElementById("hint-btn").addEventListener("click", () => useItem('scroll'));
+
+function updateHintButton() {
+    const hintBtn = document.getElementById("hint-btn");
+    const canUse = !gameState.gameOver && !isAnswering && !gameState.hintUsed && gameState.inventory.scroll > 0;
+    hintBtn.style.display = canUse ? "" : "none";
+    hintBtn.textContent = `📜 Hint Scroll (x${gameState.inventory.scroll})`;
+}
+
 function useItem(itemName) {
-    if (gameState.inventory[itemName] <= 0) return;
+    if (gameState.gameOver || gameState.inventory[itemName] <= 0) return;
 
     const timestamp = performance.now();
     let used = false;
 
-    if (itemName === 'potion' && gameState.hp < 3) {
+    if (itemName === 'potion' && gameState.hp < MAX_HP) {
         gameState.hp += 1;
         used = true;
     } else if (itemName === 'boots') {
@@ -198,7 +262,7 @@ function useItem(itemName) {
     } else if (itemName === 'shield') {
         gameState.invincibleUntil = timestamp + 5000;
         used = true;
-    } else if (itemName === 'scroll' && gameState.paused) {
+    } else if (itemName === 'scroll' && gameState.paused && !isAnswering && !gameState.hintUsed) {
         const modalOverlay = document.getElementById("math-modal-overlay");
         if (modalOverlay.style.display === "flex") {
             const answersContainer = document.getElementById("answers-container");
@@ -220,6 +284,7 @@ function useItem(itemName) {
             for (let i = 0; i < Math.min(2, wrongBtns.length); i++) {
                 wrongBtns[i].style.visibility = "hidden";
             }
+            gameState.hintUsed = true; // 每題限用一次，避免浪費卷軸
             used = true;
         }
     }
@@ -227,6 +292,7 @@ function useItem(itemName) {
     if (used) {
         gameState.inventory[itemName] -= 1;
         updateHUD();
+        updateHintButton();
     }
 }
 
@@ -257,29 +323,16 @@ function spawnEnemies(count) {
 
     if (isBossLevel) {
         gameState.bossHitsNeeded = 5;
-        let spawnX, spawnY;
-        let attempts = 0;
-        let placed = false;
-        while (!placed && attempts < 100) {
-            const r = Math.floor(Math.random() * (gameState.rows - 2)) + 1;
-            const c = Math.floor(Math.random() * (gameState.cols - 2)) + 1;
+        const spawn = findSpawnTile();
 
-            if (gameState.map[r] && gameState.map[r][c] === 0) {
-                spawnX = c * TILE_SIZE;
-                spawnY = r * TILE_SIZE;
-                placed = true;
-            }
-            attempts++;
-        }
-
-        if (placed) {
+        if (spawn) {
             const icon = Math.random() > 0.5 ? '🐉' : '👹';
             const vx = (Math.random() * 3) - 1.5;
             const vy = (Math.random() * 3) - 1.5;
 
             gameState.enemies.push({
-                x: spawnX,
-                y: spawnY,
+                x: spawn.x,
+                y: spawn.y,
                 width: 50,
                 height: 50,
                 type: 'boss',
@@ -313,25 +366,12 @@ function spawnEnemies(count) {
                 }
             }
 
-            let spawnX, spawnY;
-            let attempts = 0;
-            let placed = false;
-            while (!placed && attempts < 100) {
-                const r = Math.floor(Math.random() * (gameState.rows - 2)) + 1;
-                const c = Math.floor(Math.random() * (gameState.cols - 2)) + 1;
+            const spawn = findSpawnTile();
 
-                if (gameState.map[r] && gameState.map[r][c] === 0) {
-                    spawnX = c * TILE_SIZE;
-                    spawnY = r * TILE_SIZE;
-                    placed = true;
-                }
-                attempts++;
-            }
-
-            if (placed) {
+            if (spawn) {
                 gameState.enemies.push({
-                    x: spawnX,
-                    y: spawnY,
+                    x: spawn.x,
+                    y: spawn.y,
                     width: 50,
                     height: 50,
                     type: type,
@@ -345,8 +385,12 @@ function spawnEnemies(count) {
         }
     }
 }
-generateMap(gameState.level);
-spawnEnemies(5); // Spawn initial enemies
+function startLevel() {
+    generateMap(gameState.level);
+    spawnEnemies(5);
+    gameState.levelTouched = false;
+}
+startLevel(); // Spawn initial map and enemies
 
 function isWallCollision(rect) {
     const margin = 3;
@@ -439,6 +483,12 @@ sprite.onload = () => {
 function update(timestamp) {
     if (!gameState.lastFrameTime) gameState.lastFrameTime = timestamp;
 
+    // dt = 以 60fps 為 1 的時間倍率，讓高更新率螢幕的遊戲速度一致
+    const dt = gameState.lastUpdateTime
+        ? Math.min((timestamp - gameState.lastUpdateTime) / FRAME_MS, MAX_DT)
+        : 1;
+    gameState.lastUpdateTime = timestamp;
+
     if (gameState.paused) {
         return;
     }
@@ -450,28 +500,32 @@ function update(timestamp) {
     }
 
     const isInvincible = timestamp < gameState.invincibleUntil;
+    const inGracePeriod = timestamp < gameState.graceUntil;
+    const worldW = gameState.worldW;
+    const worldH = gameState.worldH;
 
     let isMoving = false;
     let nextX = gameState.x;
     let nextY = gameState.y;
+    const step = gameState.speed * dt;
 
     // 移動邏輯
     if (keys["ArrowRight"] || keys["KeyD"]) {
-        nextX += gameState.speed;
+        nextX += step;
         isMoving = true;
         gameState.facingLeft = false;
     }
     if (keys["ArrowLeft"] || keys["KeyA"]) {
-        nextX -= gameState.speed;
+        nextX -= step;
         isMoving = true;
-        gameState.facingLeft = true; 
+        gameState.facingLeft = true;
     }
     if (keys["ArrowUp"] || keys["KeyW"]) {
-        nextY -= gameState.speed;
+        nextY -= step;
         isMoving = true;
     }
     if (keys["ArrowDown"] || keys["KeyS"]) {
-        nextY += gameState.speed;
+        nextY += step;
         isMoving = true;
     }
 
@@ -495,9 +549,9 @@ function update(timestamp) {
 
     // 邊界檢查 (維持作為備用保護)
     if (gameState.x < -drawW/2) gameState.x = -drawW/2;
-    if (gameState.x > W - drawW/2) gameState.x = W - drawW/2;
+    if (gameState.x > worldW - drawW/2) gameState.x = worldW - drawW/2;
     if (gameState.y < -drawH/2) gameState.y = -drawH/2;
-    if (gameState.y > H - drawH/2) gameState.y = H - drawH/2;
+    if (gameState.y > worldH - drawH/2) gameState.y = worldH - drawH/2;
 
     // 自動切換動畫狀態
     if (isMoving && gameState.action !== "run") {
@@ -536,21 +590,23 @@ function update(timestamp) {
                 const maxSpeed = enemy.type === 'boss' ? 2.5 : 1.5;
 
                 // X 軸移動與碰撞
-                enemy.x += enemy.vx;
-                if (isWallCollision(enemy) || enemy.x <= 0 || enemy.x + enemy.width >= W) {
-                    enemy.x -= enemy.vx;
+                const moveX = enemy.vx * dt;
+                enemy.x += moveX;
+                if (isWallCollision(enemy) || enemy.x <= 0 || enemy.x + enemy.width >= worldW) {
+                    enemy.x -= moveX;
                     enemy.vx *= -1;
                 }
 
                 // Y 軸移動與碰撞
-                enemy.y += enemy.vy;
-                if (isWallCollision(enemy) || enemy.y <= 0 || enemy.y + enemy.height >= H) {
-                    enemy.y -= enemy.vy;
+                const moveY = enemy.vy * dt;
+                enemy.y += moveY;
+                if (isWallCollision(enemy) || enemy.y <= 0 || enemy.y + enemy.height >= worldH) {
+                    enemy.y -= moveY;
                     enemy.vy *= -1;
                 }
 
                 // 偶爾隨機微調速度方向
-                if (Math.random() < 0.02) {
+                if (Math.random() < 0.02 * dt) {
                     enemy.vx += (Math.random() * 0.5) - 0.25;
                     enemy.vy += (Math.random() * 0.5) - 0.25;
 
@@ -587,12 +643,16 @@ function update(timestamp) {
             }
 
             if (checkCollision(playerRect, enemy)) {
-                if (isInvincible && enemy.type === 'monster') {
+                if (inGracePeriod || (isInvincible && enemy.type === 'monster')) {
                     // Skip collision
                 } else {
                     gameState.paused = true;
                     gameState.currentEnemyIndex = i;
                     gameState.currentChallengeType = enemy.type;
+                    gameState.challengeSource = {
+                        x: enemy.x + enemy.width / 2,
+                        y: enemy.y + enemy.height / 2
+                    };
                     triggerMathChallenge();
                     break;
                 }
@@ -604,20 +664,25 @@ function update(timestamp) {
     for (let i = gameState.bullets.length - 1; i >= 0; i--) {
         let bullet = gameState.bullets[i];
         if (bullet.active) {
-            bullet.x += bullet.vx;
-            bullet.y += bullet.vy;
+            bullet.x += bullet.vx * dt;
+            bullet.y += bullet.vy * dt;
 
             // 飛出邊界移除
-            if (bullet.x < 0 || bullet.x > W || bullet.y < 0 || bullet.y > H || isWallCollision(bullet)) {
+            if (bullet.x < 0 || bullet.x > worldW || bullet.y < 0 || bullet.y > worldH || isWallCollision(bullet)) {
                 gameState.bullets.splice(i, 1);
                 continue;
             }
 
             if (checkCollision(playerRect, bullet)) {
-                if (!isInvincible) {
+                if (!isInvincible && !inGracePeriod) {
                     gameState.bullets.splice(i, 1);
                     gameState.paused = true;
                     gameState.currentChallengeType = 'bullet';
+                    // 以子彈飛來的方向作為擊退來源
+                    gameState.challengeSource = {
+                        x: bullet.x + bullet.width / 2 - bullet.vx * 10,
+                        y: bullet.y + bullet.height / 2 - bullet.vy * 10
+                    };
                     triggerMathChallenge();
                     break; // One bullet collision at a time
                 }
@@ -636,8 +701,7 @@ function update(timestamp) {
 
     if (allCleared && gameState.enemies.length > 0) {
         gameState.level += 1;
-        generateMap(gameState.level);
-        spawnEnemies(5);
+        startLevel();
         updateHUD();
     }
 }
@@ -649,7 +713,22 @@ function loop(timestamp) {
 }
 
 function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, W, H);
+    if (!gameState.worldW || !gameState.worldH) return;
+
+    // 將固定大小的地圖等比縮放並置中到目前視窗 (旋轉手機或縮放視窗時不會裁切)
+    const viewScale = Math.min(W / gameState.worldW, H / gameState.worldH);
+    const offsetX = (W - gameState.worldW * viewScale) / 2;
+    const offsetY = (H - gameState.worldH * viewScale) / 2;
+
+    ctx.save();
+    ctx.translate(offsetX, offsetY);
+    ctx.scale(viewScale, viewScale);
+    drawWorld();
+    ctx.restore();
+}
+
+function drawWorld() {
     // 繪製地圖網格與障礙物
     for (let r = 0; r < gameState.rows; r++) {
         for (let c = 0; c < gameState.cols; c++) {
@@ -740,12 +819,19 @@ function draw() {
     const dx = gameState.x;
     const dy = gameState.y;
 
+    const timestamp = performance.now();
+
     ctx.save();
-    
+
     // 將座標系統原點移至角色中心，以便翻轉
     ctx.translate(Math.floor(dx + drawW / 2), Math.floor(dy + drawH / 2));
     if (gameState.facingLeft) {
         ctx.scale(-1, 1);
+    }
+
+    // 答題後的保護時間內角色閃爍
+    if (!gameState.paused && timestamp < gameState.graceUntil && Math.floor(timestamp / 100) % 2 === 0) {
+        ctx.globalAlpha = 0.35;
     }
 
     // 在中心點繪製（需往回位移半個寬高）
@@ -754,8 +840,8 @@ function draw() {
         Math.floor(sx), Math.floor(sy), Math.floor(gameConfig.frameWidth), Math.floor(gameConfig.frameHeight),
         Math.floor(-drawW / 2), Math.floor(-drawH / 2), Math.floor(drawW), Math.floor(drawH)
     );
+    ctx.globalAlpha = 1;
 
-    const timestamp = performance.now();
     if (timestamp < gameState.invincibleUntil) {
         ctx.strokeStyle = "gold";
         ctx.lineWidth = 3;
@@ -789,6 +875,9 @@ function triggerMathChallenge() {
 
     // Reset feedback
     feedbackEl.textContent = "";
+    document.getElementById("math-title").textContent = "Math Challenge!";
+    gameState.hintUsed = false;
+    gameState.levelTouched = true;
 
     // Generate Question
     const ops = ['+', '-', '*'];
@@ -836,6 +925,8 @@ function triggerMathChallenge() {
         answersContainer.appendChild(btn);
     });
 
+    updateHintButton();
+
     // Show modal
     modalOverlay.style.display = "flex";
 }
@@ -857,7 +948,7 @@ function updateHUD() {
         // Fallback if not initially present
         if (heartElementsCache.length === 0) {
             hpDisplayCache.innerHTML = "";
-            for (let i = 0; i < 3; i++) {
+            for (let i = 0; i < MAX_HP; i++) {
                 const heart = document.createElement("span");
                 heart.className = "heart";
                 hpDisplayCache.appendChild(heart);
@@ -866,7 +957,7 @@ function updateHUD() {
         }
     }
 
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < MAX_HP; i++) {
         const expectedText = i < gameState.hp ? "❤️" : "🖤";
         if (heartElementsCache[i].textContent !== expectedText) {
             heartElementsCache[i].textContent = expectedText;
@@ -899,12 +990,92 @@ function updateHUD() {
 
 let isAnswering = false;
 
+// 關閉題目視窗並恢復遊戲，同時給予短暫保護時間避免立刻再次碰撞
+function resumeGame() {
+    document.getElementById("math-modal-overlay").style.display = "none";
+    for (let key in keys) {
+        keys[key] = false;
+    }
+    gameState.paused = false;
+    gameState.challengeSource = null;
+    gameState.graceUntil = performance.now() + POST_CHALLENGE_GRACE_MS;
+    isAnswering = false;
+    updateHUD();
+}
+
+// 將玩家往遠離碰撞來源的方向擊退；斜向被牆擋住時改沿單一軸滑動
+function applyKnockback(source) {
+    const drawW = gameConfig.drawWidth;
+    const drawH = gameConfig.drawHeight;
+    const hitbox = (x, y) => ({ x: x + drawW / 4, y: y + drawH / 4, width: drawW / 2, height: drawH / 2 });
+
+    let dirX = 0;
+    let dirY = 1; // 沒有來源資訊時維持往下彈
+    if (source) {
+        const dx = (gameState.x + drawW / 2) - source.x;
+        const dy = (gameState.y + drawH / 2) - source.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist > 0.001) {
+            dirX = dx / dist;
+            dirY = dy / dist;
+        }
+    }
+
+    const knockbackDist = 100;
+    const step = 5;
+    for (let moved = 0; moved < knockbackDist; moved += step) {
+        const nextX = gameState.x + dirX * step;
+        const nextY = gameState.y + dirY * step;
+        if (!isWallCollision(hitbox(nextX, nextY))) {
+            gameState.x = nextX;
+            gameState.y = nextY;
+        } else if (dirX !== 0 && !isWallCollision(hitbox(nextX, gameState.y))) {
+            gameState.x = nextX;
+        } else if (dirY !== 0 && !isWallCollision(hitbox(gameState.x, nextY))) {
+            gameState.y = nextY;
+        } else {
+            break; // 撞到牆壁，立刻停止擊退
+        }
+    }
+}
+
+function showGameOver() {
+    gameState.gameOver = true;
+    isAnswering = false;
+    document.getElementById("math-title").textContent = "Game Over";
+    document.getElementById("math-question").textContent = `Score: ${gameState.score}`;
+    document.getElementById("math-feedback").textContent = "";
+    updateHintButton();
+    updateHUD();
+
+    const answersContainer = document.getElementById("answers-container");
+    answersContainer.innerHTML = '';
+    const restartBtn = document.createElement("button");
+    restartBtn.className = "answer-btn restart-btn";
+    restartBtn.textContent = "Play Again 🔄";
+    restartBtn.onclick = resetGame;
+    answersContainer.appendChild(restartBtn);
+    restartBtn.focus();
+}
+
+function resetGame() {
+    gameState.hp = MAX_HP;
+    gameState.score = 0;
+    gameState.level = 1;
+    gameState.inventory = { potion: 0, boots: 0, scroll: 0, shield: 0 };
+    gameState.speedBoostUntil = 0;
+    gameState.invincibleUntil = 0;
+    gameState.gameOver = false;
+    startLevel();
+    resumeGame();
+}
+
 function checkAnswer(selected, correct) {
     if (isAnswering) return; // Prevent spam clicking
     isAnswering = true;
+    updateHintButton();
 
     const feedbackEl = document.getElementById("math-feedback");
-    const modalOverlay = document.getElementById("math-modal-overlay");
 
     if (selected === correct) {
         feedbackEl.style.color = "green";
@@ -917,19 +1088,12 @@ function checkAnswer(selected, correct) {
             gameState.bossHitsNeeded -= 1;
 
             if (gameState.bossHitsNeeded > 0) {
-                // Teleport boss
-                let boss = gameState.enemies[gameState.currentEnemyIndex];
-                let placed = false;
-                let attempts = 0;
-                while (!placed && attempts < 100) {
-                    const r = Math.floor(Math.random() * (gameState.rows - 2)) + 1;
-                    const c = Math.floor(Math.random() * (gameState.cols - 2)) + 1;
-                    if (gameState.map[r] && gameState.map[r][c] === 0) {
-                        boss.x = c * TILE_SIZE;
-                        boss.y = r * TILE_SIZE;
-                        placed = true;
-                    }
-                    attempts++;
+                // Teleport boss (避開玩家周圍)
+                const boss = gameState.enemies[gameState.currentEnemyIndex];
+                const spawn = findSpawnTile();
+                if (spawn) {
+                    boss.x = spawn.x;
+                    boss.y = spawn.y;
                 }
             } else {
                 gameState.enemies[gameState.currentEnemyIndex].active = false;
@@ -947,62 +1111,19 @@ function checkAnswer(selected, correct) {
             }
         }
 
-        setTimeout(() => {
-            modalOverlay.style.display = "none";
-            for (let key in keys) {
-                keys[key] = false;
-            }
-            gameState.paused = false;
-            isAnswering = false;
-            updateHUD();
-        }, 1000);
+        setTimeout(resumeGame, 1000);
     } else {
         feedbackEl.style.color = "red";
         feedbackEl.textContent = "Oops! Try again later.";
         gameState.hp -= 1;
 
-        // Knockback logic - for bullet or general knockback, we can just bounce down
-        // If it was a monster/boss, we could bounce relative to them, but bounce down is the current existing behavior
-        const drawW = gameConfig.drawWidth;
-        const drawH = gameConfig.drawHeight;
-
-        let knockbackDist = 100;
-        let step = 5;
-        for (let i = 0; i < knockbackDist; i += step) {
-            let testRect = {
-                x: gameState.x + (drawW / 4),
-                y: gameState.y + step + (drawH / 4),
-                width: drawW / 2,
-                height: drawH / 2
-            };
-            if (!isWallCollision(testRect)) {
-                gameState.y += step;
-            } else {
-                break; // 撞到牆壁，立刻停止擊退
-            }
-        }
-
-        // Ensure within bounds after knockback
-        if (gameState.y > H - drawH/2) gameState.y = H - drawH/2;
+        applyKnockback(gameState.challengeSource);
 
         setTimeout(() => {
-            modalOverlay.style.display = "none";
-            for (let key in keys) {
-                keys[key] = false;
-            }
-            gameState.paused = false;
-            isAnswering = false;
-            updateHUD();
-
             if (gameState.hp <= 0) {
-                alert("Game Over! Restarting...");
-                gameState.hp = 3;
-                gameState.score = 0;
-                gameState.x = Math.floor(gameState.cols / 2) * TILE_SIZE;
-                gameState.y = Math.floor(gameState.rows / 2) * TILE_SIZE;
-                gameState.level = 1;
-                spawnEnemies(5);
-                updateHUD();
+                showGameOver(); // 維持暫停，等玩家按下重新開始
+            } else {
+                resumeGame();
             }
         }, 1000);
     }
