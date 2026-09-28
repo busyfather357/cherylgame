@@ -1,3 +1,4 @@
+const path = require('path');
 const { chromium } = require('playwright');
 
 (async () => {
@@ -21,7 +22,8 @@ const { chromium } = require('playwright');
     await page.goto('http://localhost:8080/index.html', { waitUntil: 'networkidle' });
 
     console.log("Taking screenshot");
-    await page.screenshot({ path: 'screenshot.png' });
+    // screenshot.png 同時是 index.html 的 og:image，需放在部署資料夾 public/
+    await page.screenshot({ path: path.join(__dirname, '..', 'public', 'screenshot.png') });
 
     await browser.close();
 

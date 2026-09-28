@@ -1,3 +1,4 @@
+const path = require('path');
 const { chromium } = require('playwright');
 
 (async () => {
@@ -20,7 +21,7 @@ const { chromium } = require('playwright');
     await page.waitForTimeout(2000);
 
     // Take a screenshot to show the boss level is loaded
-    await page.screenshot({ path: 'boss_level.png' });
+    await page.screenshot({ path: path.join(__dirname, 'boss_level.png') });
 
     console.log("Screenshot taken.");
 

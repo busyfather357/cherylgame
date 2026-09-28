@@ -4,30 +4,35 @@
 
 ## 1. 目錄與檔案結構
 
-專案採用純前端靜態架構，搭配 Playwright 進行自動化測試驗證。
+專案採用純前端靜態架構，搭配 Playwright 進行自動化測試驗證。網站以 Cloudflare Pages 部署到 `https://mathrpg.mumuisland.com/`，部署資料夾為 `public/`；其餘檔案不會出現在網站上。
 
 ```text
 cherylgame/
+├── public/                     # 部署資料夾：只放網站需要的檔案
+│   ├── index.html              # 主入口文件，包含 HTML 結構、UI 容器與遊戲 Canvas
+│   ├── style.css               # 遊戲樣式表，包含 HUD 狀態欄、虛擬搖桿 (D-Pad) 與數學挑戰彈跳視窗
+│   ├── script.js               # 遊戲主邏輯核心 (地圖生成、物理碰撞、動畫、數學題庫、敵人 AI)
+│   ├── Pal_test.png            # 玩家角色精靈圖 (Sprite Sheet)
+│   └── screenshot.png          # 社群分享預覽圖 (og:image)，由 private/verify_csp.js 產生
+├── private/                    # 不部署：測試腳本與網站以外的檔案
+│   ├── test_spawn.js           # Playwright 測試：驗證寶箱 (1個) 與怪物生成數量是否正確
+│   ├── verify.js               # Playwright 測試：自動觸發 Level 5 Boss 關卡並截圖驗證
+│   ├── verify_csp.js           # Playwright 測試：驗證 CSP (內容安全策略) 與網頁載入有無 Console Error
+│   ├── boss_level.png          # 測試產出：Boss 關卡 (Level 5) 畫面截圖
+│   └── iframe.txt              # 提供給外部網站嵌入用的 iframe 語法 (限制見第 5 節)
 ├── doc/
-│   └── system_architecture.md  # 本系統架構與設計文件
-├── index.html                  # 主入口文件，包含 HTML 結構、UI 容器與遊戲 Canvas
-├── style.css                   # 遊戲樣式表，包含 HUD 狀態欄、虛擬搖桿 (D-Pad) 與數學挑戰彈跳視窗
-├── script.js                   # 遊戲主邏輯核心 (地圖生成、物理碰撞、動畫、數學題庫、敵人 AI)
-├── Pal_test.png                # 玩家角色精靈圖 (Sprite Sheet)
-├── boss_level.png              # 測試產出：Boss 關卡 (Level 5) 畫面截圖
-├── screenshot.png              # 測試產出：遊戲主畫面截圖
-├── iframe.txt                  # 提供給外部網站嵌入用的 iframe 語法 (限制見第 5 節)
+│   ├── system_architecture.md  # 本系統架構與設計文件
+│   └── item_system.md          # 道具系統設計文件
 ├── README.md                   # 專案基礎說明文件
 ├── package.json                # Node.js 依賴管理 (定義 Playwright 等測試套件)
 ├── package-lock.json           # 鎖定 npm 依賴版本
 ├── .gitignore                  # Git 忽略清單 (排除 node_modules 等)
 ├── server.log                  # 本地伺服器存取日誌紀錄
-├── test_spawn.js               # Playwright 測試：驗證寶箱 (1個) 與怪物生成數量是否正確
-├── verify.js                   # Playwright 測試：自動觸發 Level 5 Boss 關卡並截圖驗證
-├── verify_csp.js               # Playwright 測試：驗證 CSP (內容安全策略) 與網頁載入有無 Console Error
 └── test-results/               # 測試結果目錄
     └── .last-run.json
 ```
+
+* **本機測試**：測試腳本連到 `localhost`，本機伺服器必須以 `public/` 為根目錄，例如 `python -m http.server 8080 --directory public`（`verify.js` 連的是 8000 埠）。
 
 ## 2. 核心系統架構 (script.js)
 
@@ -128,15 +133,15 @@ cherylgame/
 
 ### 4.7 存檔的限制
 * 存檔只存在「該瀏覽器 + 該網址來源 (origin)」。換裝置、換瀏覽器、無痕模式都不會帶過去。
-* `https://busyfather357.github.io/cherylgame/` 與 `https://mathrpg.mumuisland.com/` 是兩個獨立來源（2026-09-25 實測 github.io 直接回應 200，不會轉址到專屬網域），兩邊的存檔互不相通。
+* 正式網址只有 `https://mathrpg.mumuisland.com/`（Cloudflare Pages）。舊的 `https://busyfather357.github.io/cherylgame/` 將關閉，不需考慮兩個網域之間的存檔同步。
 * iOS Safari：若 7 天內沒有造訪本網站，可能會清除 `localStorage`（加到主畫面的 Web App 不受此限）。
 
-## 5. iframe 嵌入 (iframe.txt) 與限制
+## 5. iframe 嵌入 (private/iframe.txt) 與限制
 
 ### 5.1 現行語法
 ```html
 <iframe
-  src="https://busyfather357.github.io/cherylgame/"
+  src="https://mathrpg.mumuisland.com/"
   style="width:100%; height:288px; border:0;"
   scrolling="no"
   sandbox="allow-scripts">
@@ -147,7 +152,7 @@ cherylgame/
 `sandbox="allow-scripts"` 沒有搭配 `allow-same-origin`，瀏覽器會把 iframe 裡的遊戲當成「沒有來源」的頁面（`self.origin === "null"`），即使網址就是遊戲自己的網域。這跟放在哪個網域無關，只要用這段語法嵌入就會發生：
 1. **無法存檔**：讀取 `window.localStorage` 直接丟出 `SecurityError`（訊息：*The document is sandboxed and lacks the 'allow-same-origin' flag*）。若沒有依 4.3 包 `try/catch`，整個遊戲會無法啟動。
 2. **現存 bug — 角色去背失效，出現白框**：對「沒有來源」的頁面來說，`Pal_test.png` 屬於跨來源圖片；畫到 canvas 後 canvas 被標記為 tainted，`getImageData` 丟出 `SecurityError`，程式進入 fallback 直接使用未去背的原圖。直接開網址時正常，只有嵌入版會出現白框。
-3. **src 指向 github.io 而非專屬網域**：嵌入版與直連版的存檔、Google Analytics 數據分散在兩個網域。
+3. **（2026-09-28 已修正）src 指向 github.io 而非專屬網域**：嵌入版與直連版的存檔、Google Analytics 數據分散在兩個網域。已改為 `https://mathrpg.mumuisland.com/`。
 4. **高度 288px 太小**：地圖只有 5 列（上下是牆，可走 3 列），HUD 會蓋住最上排；答題視窗超出 iframe 高度，標題與答題回饋文字被裁切。
 
 ### 5.3 建議語法
