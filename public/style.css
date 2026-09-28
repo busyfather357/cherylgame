@@ -20,6 +20,7 @@
             justify-content: space-between;
             align-items: flex-start;
             flex-wrap: wrap;
+            column-gap: 12px; /* 手機寬度不夠時項目會換行，避免文字黏在一起 */
             pointer-events: none;
             z-index: 10;
             text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
@@ -46,7 +47,76 @@
         }
         .heart { color: #ff4d4d; }
         .level { color: #87cefa; }
-        .score { color: #ffd700; }
+
+        /* 角色等級與經驗值進度條 (js/experience.js) */
+        .xp {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: #98fb98;
+        }
+        .xp-bar {
+            position: relative;
+            width: 90px;
+            height: 18px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid #fff;
+            border-radius: 9px;
+            overflow: hidden;
+        }
+        #xp-bar-fill {
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            width: 0;
+            background: #32cd32;
+            transition: width 0.3s;
+        }
+        #xp-bar-text {
+            position: relative;
+            display: block;
+            text-align: center;
+            font-size: 12px;
+            line-height: 18px;
+            color: #fff;
+            text-shadow: 1px 1px 0 #000;
+        }
+
+        /* 金幣與鑽石 (js/currency.js) */
+        .wallet {
+            display: flex;
+            gap: 12px;
+            color: #ffd700;
+        }
+        #diamond-display { color: #b9f2ff; }
+
+        /* 升級、成就解鎖提示，蓋在題目視窗與商店之上 */
+        #toast-container {
+            position: absolute;
+            top: 150px; /* 手機的 HUD 會換成三行，放在 HUD 下方 */
+            left: 0;
+            right: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            pointer-events: none;
+            z-index: 30;
+        }
+        .toast {
+            background: rgba(0, 0, 0, 0.75);
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 12px;
+            font-size: 20px;
+            font-weight: bold;
+            animation: toast-fade 2.5s forwards;
+        }
+        @keyframes toast-fade {
+            0% { opacity: 0; transform: translateY(-10px); }
+            10% { opacity: 1; transform: none; }
+            80% { opacity: 1; }
+            100% { opacity: 0; }
+        }
 
         /* Mobile Controls */
         #mobile-controls {
@@ -137,8 +207,8 @@
             #mobile-controls { display: block; }
         }
 
-        /* Math Challenge Modal */
-        #math-modal-overlay {
+        /* Math Challenge Modal (商店視窗共用同樣的外觀) */
+        #math-modal-overlay, #shop-overlay {
             display: none;
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -147,7 +217,7 @@
             justify-content: center;
             align-items: center;
         }
-        #math-modal {
+        #math-modal, #shop-modal {
             background: #fff8dc;
             border: 8px solid #8b4513;
             border-radius: 20px;
@@ -157,7 +227,7 @@
             max-width: 90%;
             width: 400px;
         }
-        #math-title {
+        #math-title, #shop-title {
             color: #d2691e;
             font-size: 28px;
             margin-top: 0;
@@ -209,5 +279,45 @@
             margin-top: 15px;
             font-size: 20px;
             font-weight: bold;
-            height: 24px;
+            min-height: 24px;
+            white-space: pre-line; /* 答對時第二行顯示獲得的經驗值與金幣 */
+        }
+
+        /* 商店 (js/shop.js) */
+        #shop-modal {
+            max-height: 90%;
+            overflow-y: auto;
+            box-sizing: border-box;
+            padding: 20px; /* 比題目視窗窄，手機上道具名稱才不會斷行 */
+        }
+        #shop-gold {
+            font-size: 32px;
+            font-weight: bold;
+            color: #b8860b;
+        }
+        #shop-inventory {
+            margin-top: 8px;
+            font-size: 18px;
+            color: #555;
+            white-space: pre-wrap;
+        }
+        .shop-item-btn {
+            padding: 10px 6px;
+            font-size: 18px;
+            white-space: pre-line; /* 第一行道具名稱，第二行價格 */
+        }
+        .shop-item-btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+        #shop-feedback {
+            margin-top: 12px;
+            min-height: 24px;
+            font-size: 18px;
+            font-weight: bold;
+            color: green;
+        }
+        #shop-close {
+            width: 100%;
+            margin-top: 8px;
         }

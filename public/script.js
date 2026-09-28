@@ -1,3 +1,6 @@
+// 遊戲核心：畫布、地圖、敵人、碰撞、數學題、道具、選單與主迴圈。
+// 經驗值、貨幣、成就、商店、存檔放在 js/ 資料夾，index.html 會先載入它們再載入本檔。
+
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 ctx.imageSmoothingEnabled = false;
@@ -9,8 +12,12 @@ const MAX_DT = 3;                    // 單格畫面最多補 3 格 (避免切�
 const POST_CHALLENGE_GRACE_MS = 1500; // 答題結束後的短暫保護時間
 const SPAWN_SAFE_RADIUS = 2;         // 敵人不可生成在玩家周圍 N 格內
 const ITEM_TYPES = ['potion', 'boots', 'scroll', 'shield'];
-const SAVE_KEY = 'cherylgame.save';
-const SAVE_VERSION = 1;
+const ITEM_INFO = {
+    potion: { icon: '🧪', name: '恢復藥水' },
+    boots:  { icon: '🥾', name: '神速靴' },
+    scroll: { icon: '📜', name: '提示卷軸' },
+    shield: { icon: '🛡️', name: '無敵護盾' }
+};
 
 // --- 1. 初始化畫布 ---
 let W = window.innerWidth;
@@ -67,8 +74,12 @@ const animations = {
     // 第一排 (0-3): 待機 (Idle)
     idle: { start: 0, end: 3, speed: 6 },  
     // 第二排 (4-7): 跑步 (Run) - 原本寫到 9 會跑到下一排去
-    run:  { start: 4, end: 7, speed: 12 }  
+    run:  { start: 4, end: 7, speed: 12 }
 };
+
+function createEmptyInventory() {
+    return Object.fromEntries(ITEM_TYPES.map(item => [item, 0]));
+}
 
 const gameState = {
     action: "idle",
@@ -79,7 +90,6 @@ const gameState = {
     speed: 3,
     facingLeft: false,
     hp: 3,
-    score: 0,
     level: 1,
     paused: false,
     enemies: [],
@@ -251,18 +261,20 @@ function updateHintButton() {
 }
 
 function useItem(itemName) {
-    if (gameState.gameOver || gameState.inventory[itemName] <= 0) return;
+    // 商店開著時數字鍵不使用道具，避免玩家以為是在購買
+    if (gameState.gameOver || shopOpen || gameState.inventory[itemName] <= 0) return;
 
     const timestamp = performance.now();
     let used = false;
 
+    // 靴子與護盾是 5 秒的時效道具，暫停中 (答題、選單) 使用的話效果會在暫停時白白耗掉
     if (itemName === 'potion' && gameState.hp < MAX_HP) {
         gameState.hp += 1;
         used = true;
-    } else if (itemName === 'boots') {
+    } else if (itemName === 'boots' && !gameState.paused) {
         gameState.speedBoostUntil = timestamp + 5000;
         used = true;
-    } else if (itemName === 'shield') {
+    } else if (itemName === 'shield' && !gameState.paused) {
         gameState.invincibleUntil = timestamp + 5000;
         used = true;
     } else if (itemName === 'scroll' && gameState.paused && !isAnswering && !gameState.hintUsed) {
@@ -389,95 +401,13 @@ function spawnEnemies(count) {
     }
 }
 
-// --- 存檔 (關卡起點存檔，設計見 private/doc/system_architecture.md 第 4 節) ---
-
-// 最近一次進關時的進度。localStorage 無法使用時 (例如 sandbox iframe)，Game Over 仍可用它從本關重來
-let checkpoint = null;
-
-function createEmptyInventory() {
-    return Object.fromEntries(ITEM_TYPES.map(item => [item, 0]));
-}
-
-function isIntAtLeast(value, min) {
-    return Number.isInteger(value) && value >= min;
-}
-
-// 驗證存檔內容，任何必要欄位不合格就視為沒有存檔
-function parseSave(raw) {
-    let data;
-    try {
-        data = JSON.parse(raw);
-    } catch (e) {
-        return null;
-    }
-    if (!data || data.v !== SAVE_VERSION) return null;
-    if (!isIntAtLeast(data.level, 1) || !isIntAtLeast(data.score, 0) || !isIntAtLeast(data.hp, 1)) return null;
-
-    // 以空道具欄為底只取已知道具，將來新增道具時舊存檔也能讀
-    const inventory = createEmptyInventory();
-    if (data.inventory && typeof data.inventory === 'object') {
-        for (const item of ITEM_TYPES) {
-            if (isIntAtLeast(data.inventory[item], 0)) inventory[item] = data.inventory[item];
-        }
-    }
-    return { level: data.level, score: data.score, hp: Math.min(data.hp, MAX_HP), inventory };
-}
-
-// sandbox iframe 中連讀取 window.localStorage 都會丟 SecurityError，所以每次存取都包 try/catch
-function readSave() {
-    try {
-        const raw = window.localStorage.getItem(SAVE_KEY);
-        return raw ? parseSave(raw) : null;
-    } catch (e) {
-        return null;
-    }
-}
-
-function clearSave() {
-    try {
-        window.localStorage.removeItem(SAVE_KEY);
-    } catch (e) {
-        // 無法使用 localStorage，本來就沒有存檔
-    }
-}
-
-function saveProgress() {
-    checkpoint = {
-        level: gameState.level,
-        score: gameState.score,
-        hp: gameState.hp,
-        inventory: { ...gameState.inventory }
-    };
-    try {
-        window.localStorage.setItem(SAVE_KEY, JSON.stringify({ v: SAVE_VERSION, ...checkpoint }));
-    } catch (e) {
-        // 無法存檔時靜默略過，遊戲照常進行
-    }
-}
-
-function applyProgress(progress) {
-    gameState.level = progress.level;
-    gameState.score = progress.score;
-    gameState.hp = progress.hp;
-    gameState.inventory = { ...progress.inventory };
-}
-
-// 必須在第一次 startLevel() 之前執行，魔王關判斷與地板配色才會用到存檔的關卡數
-function loadProgress() {
-    // 開發測試用：網址加上 ?newgame 時忽略並清除存檔
-    if (new URLSearchParams(window.location.search).has('newgame')) {
-        clearSave();
-        return;
-    }
-    const save = readSave();
-    if (save) applyProgress(save);
-}
-
+// 存檔在 js/save.js。loadProgress() 必須在第一次 startLevel() 之前執行，魔王關判斷與地板配色才會用到存檔的關卡數
 function startLevel() {
     generateMap(gameState.level);
     spawnEnemies(5);
     gameState.levelTouched = false;
     saveProgress(); // 過關、重新開始、縮放重建地圖都會經過這裡
+    recordStageReached(gameState.level);
 }
 loadProgress();
 startLevel(); // Spawn initial map and enemies
@@ -793,6 +723,7 @@ function update(timestamp) {
         gameState.level += 1;
         startLevel();
         updateHUD();
+        showStageClear();
     }
 }
 
@@ -1011,7 +942,7 @@ function triggerMathChallenge() {
         if (ans === correctAnswer) {
             btn.dataset.correct = "true";
         }
-        btn.onclick = () => checkAnswer(ans, correctAnswer);
+        btn.onclick = () => checkAnswer(ans, correctAnswer, op);
         answersContainer.appendChild(btn);
     });
 
@@ -1023,7 +954,6 @@ function triggerMathChallenge() {
 
 // Cache DOM elements for HUD to avoid querying and recreating every time
 let hpDisplayCache = null;
-let scoreDisplayCache = null;
 let levelDisplayCache = null;
 let heartElementsCache = [];
 
@@ -1031,7 +961,6 @@ function updateHUD() {
     // Update HP
     if (!hpDisplayCache) {
         hpDisplayCache = document.getElementById("hp-display");
-        scoreDisplayCache = document.getElementById("score-display");
         levelDisplayCache = document.getElementById("level-display");
         heartElementsCache = Array.from(hpDisplayCache.getElementsByClassName("heart"));
 
@@ -1054,28 +983,30 @@ function updateHUD() {
         }
     }
 
-    // Update Level
-    const expectedLevel = `Level: ${gameState.level}`;
+    // 關卡 (Stage)；角色等級 (Lv) 由 js/experience.js 更新
+    const expectedLevel = `Stage ${gameState.level}`;
     if (levelDisplayCache && levelDisplayCache.textContent !== expectedLevel) {
         levelDisplayCache.textContent = expectedLevel;
     }
 
-    // Update Score
-    const expectedScore = `Score: ${gameState.score}`;
-    if (scoreDisplayCache.textContent !== expectedScore) {
-        scoreDisplayCache.textContent = expectedScore;
-    }
+    updateXpHUD();
+    updateWalletHUD();
 
     // Update Inventory
-    const invPotion = document.getElementById("inv-potion");
-    const invBoots = document.getElementById("inv-boots");
-    const invScroll = document.getElementById("inv-scroll");
-    const invShield = document.getElementById("inv-shield");
+    for (const item of ITEM_TYPES) {
+        const invEl = document.getElementById(`inv-${item}`);
+        if (invEl) invEl.textContent = `${ITEM_INFO[item].icon} x${gameState.inventory[item]}`;
+    }
+}
 
-    if (invPotion) invPotion.textContent = `🧪 x${gameState.inventory.potion}`;
-    if (invBoots) invBoots.textContent = `🥾 x${gameState.inventory.boots}`;
-    if (invScroll) invScroll.textContent = `📜 x${gameState.inventory.scroll}`;
-    if (invShield) invShield.textContent = `🛡️ x${gameState.inventory.shield}`;
+// 在畫面上方短暫顯示提示 (升級、成就解鎖)，會蓋在題目視窗之上
+// 第一次 startLevel() 時就可能被呼叫，所以不能用到本檔以 let 宣告的變數 (TDZ)
+function showToast(text) {
+    const toast = document.createElement("div");
+    toast.className = "toast";
+    toast.textContent = text;
+    document.getElementById("toast-container").appendChild(toast);
+    setTimeout(() => toast.remove(), 2500);
 }
 
 let isAnswering = false;
@@ -1129,7 +1060,7 @@ function applyKnockback(source) {
     }
 }
 
-// 借用題目視窗的答案區顯示選單按鈕 (Game Over、歡迎回來共用)，視窗需已顯示才能設定焦點
+// 借用題目視窗的答案區顯示選單按鈕，視窗需已顯示才能設定焦點
 function showMenuButtons(buttons) {
     const answersContainer = document.getElementById("answers-container");
     answersContainer.innerHTML = '';
@@ -1143,38 +1074,47 @@ function showMenuButtons(buttons) {
     answersContainer.firstChild.focus();
 }
 
+// 借用題目視窗顯示選單 (歡迎回來、過關、Game Over 共用)
+function showMenu(title, message, buttons) {
+    gameState.paused = true;
+    gameState.hintUsed = true; // 選單沒有題目，停用提示卷軸 (下次出題時會重設)
+    document.getElementById("math-title").textContent = title;
+    document.getElementById("math-question").textContent = message;
+    document.getElementById("math-feedback").textContent = "";
+    updateHintButton();
+    document.getElementById("math-modal-overlay").style.display = "flex";
+    showMenuButtons(buttons);
+}
+
 function showGameOver() {
     gameState.gameOver = true;
     isAnswering = false;
-    document.getElementById("math-title").textContent = "Game Over";
-    document.getElementById("math-question").textContent = `Score: ${gameState.score}`;
-    document.getElementById("math-feedback").textContent = "";
-    updateHintButton();
     updateHUD();
 
     // 存檔不清除：第 2 關以後可以從本關起點重來
     if (checkpoint && checkpoint.level > 1) {
-        showMenuButtons([
-            { label: `Retry Level ${checkpoint.level} 🔁`, onClick: () => restartFrom(checkpoint) },
+        showMenu("Game Over", `XP: ${profile.xp}`, [
+            { label: `Retry Stage ${checkpoint.level} 🔁`, onClick: () => restartFrom(checkpoint) },
             { label: "New Game 🔄", onClick: resetGame }
         ]);
     } else {
-        showMenuButtons([{ label: "Play Again 🔄", onClick: resetGame }]);
+        showMenu("Game Over", `XP: ${profile.xp}`, [{ label: "Play Again 🔄", onClick: resetGame }]);
     }
 }
 
 // 讀到第 2 關以後的存檔時，先暫停並讓玩家選擇繼續或從頭開始
 function showWelcomeBack() {
-    gameState.paused = true;
-    gameState.hintUsed = true; // 這個視窗沒有題目，停用提示卷軸 (下次出題時會重設)
-    document.getElementById("math-title").textContent = "Welcome Back!";
-    document.getElementById("math-question").textContent = `Level ${gameState.level}`;
-    document.getElementById("math-feedback").textContent = "";
-    updateHintButton();
-    document.getElementById("math-modal-overlay").style.display = "flex";
-    showMenuButtons([
+    showMenu("Welcome Back!", `Stage ${gameState.level}`, [
         { label: "Continue ▶️", onClick: resumeGame },
         { label: "New Game 🔄", onClick: resetGame }
+    ]);
+}
+
+// 過關後 (已進入下一關、還沒開始移動) 暫停，讓玩家選擇直接開始或先去商店
+function showStageClear() {
+    showMenu(`Stage ${gameState.level - 1} Clear! 🎉`, `🪙 ${profile.gold}`, [
+        { label: `Stage ${gameState.level} ▶️`, onClick: resumeGame },
+        { label: "Shop 🛒", onClick: openShop }
     ]);
 }
 
@@ -1188,28 +1128,31 @@ function restartFrom(progress) {
     resumeGame();
 }
 
+// New Game 只重設本局進度；經驗值、金幣、鑽石、成就 (profile) 都保留
 function resetGame() {
-    restartFrom({ level: 1, score: 0, hp: MAX_HP, inventory: createEmptyInventory() });
+    restartFrom({ level: 1, hp: MAX_HP, inventory: createEmptyInventory() });
 }
 
-function checkAnswer(selected, correct) {
+function checkAnswer(selected, correct, op) {
     if (isAnswering) return; // Prevent spam clicking
     isAnswering = true;
     updateHintButton();
 
     const feedbackEl = document.getElementById("math-feedback");
+    recordAnswer(op, selected === correct);
 
     if (selected === correct) {
         feedbackEl.style.color = "green";
-        feedbackEl.textContent = "Correct! ✨";
+        let message = "Correct! ✨";
+        let rewardType = null; // XP_REWARDS / GOLD_REWARDS 的鍵；子彈題沒有獎勵
 
         if (gameState.currentChallengeType === 'bullet') {
-            // No score change
+            // 子彈題答對只是避免扣血
         } else if (gameState.currentChallengeType === 'boss') {
-            gameState.score += 10;
             gameState.bossHitsNeeded -= 1;
 
             if (gameState.bossHitsNeeded > 0) {
+                rewardType = 'bossHit';
                 // Teleport boss (避開玩家周圍)
                 const boss = gameState.enemies[gameState.currentEnemyIndex];
                 const spawn = findSpawnTile();
@@ -1218,19 +1161,29 @@ function checkAnswer(selected, correct) {
                     boss.y = spawn.y;
                 }
             } else {
+                rewardType = 'bossDefeat';
                 gameState.enemies[gameState.currentEnemyIndex].active = false;
+                recordBossDefeated();
             }
         } else {
-            gameState.score += 10;
+            rewardType = gameState.currentChallengeType; // 'monster' 或 'chest'
             gameState.enemies[gameState.currentEnemyIndex].active = false;
 
             if (gameState.currentChallengeType === 'chest') {
-                const itemNames = { 'potion': '恢復藥水', 'boots': '神速靴', 'scroll': '提示卷軸', 'shield': '無敵護盾' };
                 const drop = ITEM_TYPES[Math.floor(Math.random() * ITEM_TYPES.length)];
                 gameState.inventory[drop] += 1;
-                feedbackEl.textContent = `Correct! ✨ Obtained 1x ${itemNames[drop]}`;
+                message = `Correct! ✨ Obtained 1x ${ITEM_INFO[drop].name}`;
             }
         }
+
+        if (rewardType) {
+            const xp = XP_REWARDS[rewardType];
+            const gold = GOLD_REWARDS[rewardType];
+            gainXp(xp);
+            addGold(gold);
+            message += `\n+${xp} XP  +${gold} 🪙`;
+        }
+        feedbackEl.textContent = message;
 
         setTimeout(resumeGame, 1000);
     } else {

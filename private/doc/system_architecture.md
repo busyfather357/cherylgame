@@ -10,8 +10,14 @@
 cherylgame/
 ├── public/                     # 部署資料夾：只放網站需要的檔案
 │   ├── index.html              # 主入口文件，包含 HTML 結構、UI 容器與遊戲 Canvas
-│   ├── style.css               # 遊戲樣式表，包含 HUD 狀態欄、虛擬搖桿 (D-Pad) 與數學挑戰彈跳視窗
-│   ├── script.js               # 遊戲主邏輯核心 (地圖生成、物理碰撞、動畫、數學題庫、敵人 AI)
+│   ├── style.css               # 遊戲樣式表，包含 HUD 狀態欄、虛擬搖桿 (D-Pad)、數學挑戰彈跳視窗與商店
+│   ├── script.js               # 遊戲主邏輯核心 (地圖生成、物理碰撞、動畫、數學題庫、敵人 AI、道具、選單)
+│   ├── js/                     # 依系統拆開的檔案 (見第 6 節)，在 script.js 之前載入
+│   │   ├── experience.js       # 經驗值與角色等級
+│   │   ├── currency.js         # 金幣與鑽石
+│   │   ├── achievements.js     # 答題統計與成就
+│   │   ├── shop.js             # 商店
+│   │   └── save.js             # 存檔 (見第 4 節)
 │   ├── Pal_test.png            # 玩家角色精靈圖 (Sprite Sheet)
 │   └── screenshot.png          # 社群分享預覽圖 (og:image)，由 private/verify_csp.js 產生
 ├── private/                    # 不部署：測試腳本與網站以外的檔案
@@ -38,6 +44,11 @@ cherylgame/
 ## 2. 核心系統架構 (script.js)
 
 遊戲核心為基於 `requestAnimationFrame` 的自定義 Game Loop，不依賴大型遊戲引擎，確保極致的輕量化與靈活性。
+
+* **檔案拆分與載入順序**：所有 `.js` 都是 classic script，頂層宣告是全域、可跨檔案使用 (測試以 `page.evaluate` 直接存取)。`index.html` 依序載入 `js/experience.js` → `currency.js` → `achievements.js` → `shop.js` → `save.js` → `script.js`。
+    * `script.js` 最後載入，因為它一執行就會讀檔 (`loadProgress()`) 並開始第 1 關；系統檔案在載入時只定義常數與函式，不呼叫 `script.js`。
+    * `achievements.js` 必須在 `save.js` 之前：`save.js` 載入時就用 `createEmptyStats()` 建立預設的 `profile`。
+    * 每個系統檔案開頭都註明它用到其他檔案的哪些變數與函式。
 
 ### 2.1 畫面與渲染 (Canvas Rendering)
 * **響應式畫布**：監聽 `resize` 與 `orientationchange` 事件，動態調整 Canvas 寬高，並支援高解析度螢幕 (DPR) 確保畫質清晰。
@@ -69,29 +80,45 @@ cherylgame/
     * 乘法：九九乘法表範圍 (1~9)。
 * **選項生成**：產生 1 個正確答案與 3 個隨機干擾選項，並洗牌打亂順序。
 * **獎懲機制**：
-    * **答對**：加 10 分，消滅該怪物（若是 Boss 則扣除其生命值並將其隨機傳送）。恢復遊戲。
-    * **答錯**：扣除 1 顆愛心 (HP)，觸發物理擊退效果 (Knockback)，強制玩家往後退一段距離避免連續碰撞。若 HP 歸零則觸發 Game Over；第 2 關以後可選擇從本關起點重來或從頭開始（見 4.5）。
+    * **答對**：消滅該怪物（若是 Boss 則扣除其生命值並將其隨機傳送），獲得經驗值與金幣（數值見 6.1；子彈題沒有獎勵）。恢復遊戲。原本的分數 (Score) 已由經驗值取代。
+    * **答錯**：扣除 1 顆愛心 (HP)，觸發物理擊退效果 (Knockback)，強制玩家往後退一段距離避免連續碰撞。不扣經驗值與金幣。若 HP 歸零則觸發 Game Over；第 2 關以後可選擇從本關起點重來或從頭開始（見 4.5）。
+    * 每一題（包含子彈題）的對錯都會記錄到答題統計，供成就系統使用（見 6.3）。
 
 ## 3. UI/UX 介面設計 (style.css & index.html)
 
-* **HUD 狀態列**：位於畫面上方，顯示當前血量 (❤️)、關卡層數 (Level) 與分數 (Score)，使用文字陰影提升在各種底色下的可讀性。
+* **HUD 狀態列**：位於畫面上方，顯示當前血量 (❤️)、關卡 (`Stage N`)、角色等級與經驗值進度條 (`Lv N`，進度條上顯示累計經驗值)、金幣 (🪙) 與鑽石 (💎)，下一行是道具欄。使用文字陰影提升在各種底色下的可讀性；手機寬度不夠時會自動換行。
+    * 畫面上關卡叫 Stage、角色等級叫 Lv，避免兩個「Level」混淆；程式裡的 `gameState.level` 仍是關卡。
 * **Mobile-First 控制區**：透過 CSS 媒體查詢 `@media (hover: none) and (pointer: coarse)` 自動判斷裝置。若為觸控螢幕，則顯示左下角 D-Pad 與右下角 Action 按鈕。
-* **數學題庫彈窗**：使用絕對定位覆蓋於 Canvas 之上，採防呆設計（`isAnswering` 狀態鎖），防止玩家連點造成重複計分或錯誤判定。同一個視窗也用來顯示 Game Over 與「歡迎回來」選單（見 4.5）。
+* **數學題庫彈窗**：使用絕對定位覆蓋於 Canvas 之上，採防呆設計（`isAnswering` 狀態鎖），防止玩家連點造成重複計分或錯誤判定。答對時第二行顯示獲得的經驗值與金幣。同一個視窗也用 `showMenu()` 顯示 Game Over、「歡迎回來」與過關選單（見 4.5、6.4）。
+* **商店視窗** (`#shop-overlay`)：外觀與題目視窗相同，由 `js/shop.js` 控制（見 6.4）。
+* **提示訊息 (toast)**：升級與成就解鎖時，`showToast()` 在 HUD 下方顯示 2.5 秒，蓋在題目視窗與商店之上。
+* **暫停中不能使用神速靴與無敵護盾**：它們是 5 秒的時效道具，在答題或選單畫面使用會白白耗掉；商店開著時數字鍵 1～4 完全不使用道具。
 
 ## 4. 存檔機制 (Save System)
 
-2026-09-28 實作於 `public/script.js` 的「存檔」區段（位於 `startLevel()` 之前）。
+2026-09-28 實作，目前格式為 v2（加入經驗值、貨幣與成就），程式在 `public/js/save.js`。
 
-### 4.1 方案：關卡起點存檔 (Checkpoint)
-* 每次**進入新關卡**時，把當下的 `level`、`score`、`hp`、`inventory` 寫入瀏覽器的 `localStorage`。
-* 重新整理或下次開啟時，從該關**開頭**繼續；地圖與敵人照常重新隨機生成。
-* 不採「完整快照」（連地圖、敵人位置、子彈、道具計時都存）：需要重建圖片物件、換算計時器、處理答題中的狀態，程式量約三倍且容易出錯；而且地圖大小依當時視窗決定，換裝置或旋轉手機後讀回會比例失調。
-* **一致性原則**：存檔必須是「同一時間點」的完整狀態。不可以每答一題就存分數與道具，但讀檔時又重生整關的敵人，否則寶箱會重生，玩家可靠重新整理無限刷道具。
+### 4.1 方案：本局進度 + 永久資料
+存檔分成兩部分，放在同一個 `localStorage` key，每次整份一起寫入，不會只存到一半：
+
+| | 本局進度 `run` | 永久資料 `profile` |
+|---|---|---|
+| 內容 | `level`、`hp`、`inventory` | `xp`、`gold`、`diamonds`、`stats`（答題統計）、`achievements` |
+| 寫入時機 | 只在「進關當下」：`startLevel()`，以及進關時開放的商店 | 一有變動就寫入（`saveProfile()`），關卡中途也可以 |
+| 重新整理 | 回到該關起點 | 保留 |
+| 從本關重來 | 回到進關時的數值 | 保留，不回溯 |
+| New Game | 重設為第 1 關 | 保留 |
+
+* **本局進度採關卡起點存檔 (Checkpoint)**：重新整理或下次開啟時，從該關**開頭**繼續；地圖與敵人照常重新隨機生成。
+    * 不採「完整快照」（連地圖、敵人位置、子彈、道具計時都存）：需要重建圖片物件、換算計時器、處理答題中的狀態，程式量約三倍且容易出錯；而且地圖大小依當時視窗決定，換裝置或旋轉手機後讀回會比例失調。
+    * **一致性原則**：本局進度必須是「同一時間點」的完整狀態。不可以每答一題就存道具，但讀檔時又重生整關的敵人，否則寶箱會重生，玩家可靠重新整理無限刷道具。
+* **永久資料為什麼可以立即寫入**：經驗值與金幣都是「每答對一題」才給，重新整理後重打怪物，拿到的速度跟正常往下玩一樣，只是多做了數學題，不構成漏洞。規則是**不要讓寶箱這類會隨讀檔重生的東西額外多給獎勵**；目前寶箱給的經驗值與金幣跟怪物相同，額外的道具屬於本局進度，會跟著 checkpoint 回溯。之後接上看廣告換鑽石時，也必須立即寫入，不能等到下一關。
 
 ### 4.2 存檔欄位
-| `gameState` 欄位 | 是否存檔 | 原因 |
+| 欄位 | 是否存檔 | 原因 |
 |---|---|---|
-| `level`、`score`、`hp`、`inventory` | 存 | 玩家進度本體 |
+| `gameState` 的 `level`、`hp`、`inventory` | 存 (`run`) | 本局進度本體 |
+| `profile` 全部欄位 | 存 (`profile`) | 永久資料本體 (見第 6 節) |
 | `map`、`enemies`、`bullets`、`x`/`y`、`bossHitsNeeded` | 不存 | 每關本來就隨機生成，進關時由 `startLevel()` 重建 |
 | `speedBoostUntil`、`invincibleUntil`、`graceUntil`、`lastFrameTime`、`lastUpdateTime` | 不存 | 以 `performance.now()` 為基準，頁面重新載入後從 0 起算，舊值無意義；道具效果只有 5 秒，進新關時直接清除 |
 | `enemies[].spriteImg` | 不存 | `Image` 物件，轉 JSON 會變成 `{}` |
@@ -100,48 +127,73 @@ cherylgame/
 ### 4.3 資料格式與讀取驗證
 * `localStorage` key：`cherylgame.save`，內容：
     ```json
-    { "v": 1, "level": 7, "score": 320, "hp": 2, "inventory": { "potion": 1, "boots": 0, "scroll": 2, "shield": 0 } }
+    {
+      "v": 2,
+      "run": { "level": 7, "hp": 2, "inventory": { "potion": 1, "boots": 0, "scroll": 2, "shield": 0 } },
+      "profile": {
+        "xp": 320, "gold": 45, "diamonds": 4,
+        "stats": {
+          "correct": 40, "wrong": 3, "streak": 5, "bestStreak": 12,
+          "ops": { "+": { "correct": 15, "wrong": 1 }, "-": { "correct": 12, "wrong": 2 }, "*": { "correct": 13, "wrong": 0 } },
+          "bossesDefeated": 1, "highestStage": 7
+        },
+        "achievements": { "first_correct": 1790587643022, "first_boss": 1790587700000 }
+      }
+    }
     ```
-* 讀取時逐項驗證，任何一項不合格就視為「沒有存檔」：
-    * `JSON.parse` 失敗或 `v` 不符 → 無存檔。
-    * `level` 必須是正整數；`score` 必須是非負整數。
+* `JSON.parse` 失敗、或 `v` 不是 1 或 2 → 無存檔，從第 1 關開始。
+* **`run`** 任何必要欄位不合格就只丟掉 `run`（從第 1 關開始），**`profile` 照常讀取**，不會因為本局進度壞掉就清空經驗值與鑽石：
+    * `level` 必須是正整數。
     * `hp` 必須是整數，限制在 `1`～`MAX_HP`（`hp <= 0` 視為無效）。
-    * `inventory` 以預設值 `{ potion: 0, boots: 0, scroll: 0, shield: 0 }` 為底，只合併已知道具、非負整數的欄位；將來新增道具時，舊存檔不會壞掉。
-* **所有 `localStorage` 存取都必須包在 `try/catch` 裡。** 在 sandbox iframe 中，連讀取 `window.localStorage` 這個屬性都會丟出 `SecurityError`（見第 5 節）；`script.js` 在最外層直接執行，沒有攔截的話整個遊戲會無法啟動。失敗時靜默退化為「不存檔」模式，遊戲照常進行。
+    * `inventory` 以空道具欄為底，只合併已知道具、非負整數的欄位；將來新增道具時，舊存檔不會壞掉。
+* **`profile`** 以 `createEmptyProfile()` 為底，逐欄合併（`mergeCounts()`，巢狀的 `stats` 也逐層處理）：只取已知欄位中的非負整數，不合格的欄位用預設值，不認識的欄位丟棄。`achievements` 只保留 `ACHIEVEMENTS` 中存在的 id、值為正整數（解鎖時間）的項目。
+* **v1 → v2 轉換** (`migrateV1()`)：v1 格式是 `{ "v": 1, "level", "score", "hp", "inventory" }`。`level`、`hp`、`inventory` 成為 `run`；分數與經驗值同樣是每答對一題 +10，所以 `score` 直接成為 `profile.xp`，其他永久資料從 0 開始。維持 v1 的規則，`score` 不是非負整數時視為無存檔。轉換後的第一次 `startLevel()` 就會以 v2 格式寫回。
+* **存檔格式改變時要提高 `SAVE_VERSION`，並在 `parseSave()` 加上舊版本的轉換**；只提高版本號的話，`v` 不符會被當成無存檔，現有玩家的進度會全部消失。
+* **所有 `localStorage` 存取都必須包在 `try/catch` 裡**（只在 `save.js` 的 `readSave()`、`clearSave()`、`writeSave()`）。在 sandbox iframe 中，連讀取 `window.localStorage` 這個屬性都會丟出 `SecurityError`（見第 5 節）；沒有攔截的話整個遊戲會無法啟動。失敗時靜默退化為「不存檔」模式，遊戲照常進行，`checkpoint` 與 `profile` 仍保留在記憶體中。
 
-### 4.4 程式結構 (public/script.js)
+### 4.4 程式結構 (public/js/save.js)
 | 名稱 | 作用 |
 |---|---|
-| `ITEM_TYPES`、`SAVE_KEY`、`SAVE_VERSION` | 檔案開頭的常數。`ITEM_TYPES` 同時用於空道具欄、存檔驗證與寶箱掉落，新增道具只需改這裡 |
-| `checkpoint` | 記憶體中「最近一次進關時」的進度。`localStorage` 無法使用時（例如 sandbox iframe），Game Over 仍能用它從本關重來 |
-| `saveProgress()` | 更新 `checkpoint` 並寫入 `localStorage`。只在 `startLevel()` 內呼叫 |
-| `loadProgress()` | 處理 `?newgame`，讀取並套用存檔。在檔案中第一次呼叫 `startLevel()` 之前執行 |
-| `readSave()`、`parseSave()`、`clearSave()` | `localStorage` 存取（全部包 `try/catch`）與 4.3 的驗證規則 |
-| `applyProgress()` | 把進度寫回 `gameState`，道具欄會複製一份，避免遊戲中修改到 `checkpoint` |
-| `restartFrom(progress)` | 從指定進度重新開始一關：套用進度 → 清除道具計時 → `startLevel()` → `resumeGame()`。`resetGame()` 與「從本關重來」共用 |
-| `showWelcomeBack()`、`showMenuButtons()` | 借用數學題視窗顯示選單；`showGameOver()` 也改用 `showMenuButtons()` |
+| `SAVE_KEY`、`SAVE_VERSION` | 檔案開頭的常數 |
+| `checkpoint` | 記憶體中「最近一次進關時」的本局進度。`localStorage` 無法使用時（例如 sandbox iframe），Game Over 仍能用它從本關重來 |
+| `profile` | 永久資料。各系統直接讀寫自己的欄位，改完呼叫 `saveProfile()` |
+| `saveProgress()` | 更新 `checkpoint` 並存檔。只在 `startLevel()` 與商店購買 (`buyItem()`) 時呼叫 |
+| `saveProfile()` | 永久資料有變動時呼叫。`run` 一律寫入 `checkpoint`，所以關卡中途呼叫也不會存到中途的道具 |
+| `loadProgress()` | 處理 `?newgame`，讀取並套用存檔。在 `script.js` 第一次呼叫 `startLevel()` 之前執行 |
+| `readSave()`、`parseSave()`、`parseRun()`、`parseProfile()`、`migrateV1()`、`clearSave()`、`writeSave()` | `localStorage` 存取（全部包 `try/catch`）與 4.3 的驗證、轉換規則 |
+| `createEmptyProfile()`、`mergeCounts()` | 永久資料的預設值，以及「以預設值為底、只合併已知欄位」的驗證 |
+| `applyProgress()` | 把本局進度寫回 `gameState`，道具欄會複製一份，避免遊戲中修改到 `checkpoint` |
 
-* **寫入時機**：`saveProgress()` 放在 `startLevel()` 內，這一個位置就涵蓋所有呼叫端：
-    * 初次啟動（檔案中第一次呼叫 `startLevel()`）
+`script.js` 中與存檔相關的函式：
+| 名稱 | 作用 |
+|---|---|
+| `restartFrom(progress)` | 從指定本局進度重新開始一關：套用進度 → 清除道具計時 → `startLevel()` → `resumeGame()`。`resetGame()` 與「從本關重來」共用；兩者都不動 `profile` |
+| `showMenu()`、`showMenuButtons()` | 借用數學題視窗顯示選單：`showWelcomeBack()`、`showStageClear()`、`showGameOver()` 共用 |
+
+* **本局進度的寫入時機**：`saveProgress()` 放在 `startLevel()` 內，這一個位置就涵蓋所有進關的情況：
+    * 初次啟動（`script.js` 中第一次呼叫 `startLevel()`）
     * 過關（`update()` 中 `allCleared` 分支，`level += 1` 後）
     * 從頭開始／從本關重來（`restartFrom()`）
     * 視窗縮放重建地圖（`handleResize()`）：只在本關尚未觸發題目時發生，數值與上次存檔相同，重存無害。
+    * 另外，商店只在進關時（`levelTouched` 為 false）開放，購買後的道具視同進關時就有，所以 `buyItem()` 也呼叫 `saveProgress()`。
 * **讀取時機**：`loadProgress()` 必須在第一次 `startLevel()` 之前，魔王關判斷（`spawnEnemies()` 的 `level % 5`）與地板配色（`drawWorld()`）才會一開始就用正確的關卡數。
-* **UI 時序限制**：`showWelcomeBack()` 放在檔案最末端 `updateHUD()` 初始化之後。`hpDisplayCache`、`isAnswering` 等變數以 `let` 宣告在檔案中段，第一次 `startLevel()` 執行時它們還不能使用（TDZ），提早呼叫 `updateHUD()`／`updateHintButton()` 會丟出 `ReferenceError`，遊戲直接停止。同理，`checkpoint` 必須宣告在第一次 `startLevel()` 之前。
+* **UI 時序限制**：`showWelcomeBack()` 放在 `script.js` 最末端 `updateHUD()` 初始化之後。`hpDisplayCache`、`isAnswering` 等變數以 `let` 宣告在 `script.js` 中段，第一次 `startLevel()` 執行時它們還不能使用（TDZ），提早呼叫 `updateHUD()`／`updateHintButton()` 會丟出 `ReferenceError`，遊戲直接停止。第一次 `startLevel()` 會呼叫 `recordStageReached()`，可能解鎖成就並顯示提示，所以 `showToast()` 與各系統更新 HUD 的函式都直接操作 DOM，不使用 `script.js` 的 `let` 變數。
 
 ### 4.5 玩家流程 (UX)
 * **開場**：
-    * 沒有存檔，或存檔在第 1 關 → 維持原樣，直接開始遊戲（第 1 關的存檔必定是 0 分、滿血、無道具，等同新遊戲）。
-    * 存檔在第 2 關以上 → 暫停遊戲，顯示「Welcome Back! / Level N」與兩個按鈕：`Continue ▶️`（`resumeGame()`）、`New Game 🔄`（`resetGame()`）。
-    * 歡迎視窗沒有題目，所以會停用提示卷軸（設 `hintUsed = true`，下次出題時重設），避免按鍵 3 把選單按鈕當成錯誤答案隱藏。
-* **Game Over**：**不清除存檔**。
-    * 第 2 關以上：顯示 `Retry Level N 🔁`（`restartFrom(checkpoint)`）與 `New Game 🔄`。
-    * 第 1 關：只顯示原本的 `Play Again 🔄`。
+    * 沒有存檔，或存檔在第 1 關 → 直接開始遊戲。
+    * 存檔在第 2 關以上 → 暫停遊戲，顯示「Welcome Back! / Stage N」與兩個按鈕：`Continue ▶️`（`resumeGame()`）、`New Game 🔄`（`resetGame()`）。
+    * 選單沒有題目，所以 `showMenu()` 會停用提示卷軸（設 `hintUsed = true`，下次出題時重設），避免按鍵 3 把選單按鈕當成錯誤答案隱藏。
+* **過關**：暫停並顯示「Stage N Clear! 🎉」與目前金幣，按鈕 `Stage N+1 ▶️`（直接開始）與 `Shop 🛒`（見 6.4）。
+* **Game Over**：**不清除存檔**，畫面顯示累計經驗值。
+    * 第 2 關以上：顯示 `Retry Stage N 🔁`（`restartFrom(checkpoint)`）與 `New Game 🔄`。
+    * 第 1 關：只顯示 `Play Again 🔄`。
     * 理由：本遊戲以兒童練習數學為目的，從關卡起點重來比整個歸零的挫折感低。
+* **New Game** 只重設本局進度；經驗值、金幣、鑽石、答題統計、成就都保留。
 * **已知取捨**：
-    * 關卡中途重新整理頁面，會回到該關起點，HP 也回到進關時的數值。對兒童遊戲可接受，不另外防範。
+    * 關卡中途重新整理頁面，會回到該關起點，HP 與道具也回到進關時的數值；經驗值與金幣保留。對兒童遊戲可接受，不另外防範。
     * 從本關重來時，HP 是進關時的數值；若進關時只剩 1 顆心，重來也只有 1 顆心。
-* **開發測試用**：網址加上 `?newgame` 時，忽略並清除存檔。Playwright 測試每次都使用全新的瀏覽器環境，不受存檔影響。
+* **開發測試用**：網址加上 `?newgame` 時，忽略並清除整份存檔（包含永久資料）。Playwright 測試每次都使用全新的瀏覽器環境，不受存檔影響。
 * 選單文字沿用現有 UI 的英文風格（Math Challenge!、Game Over、Play Again）。
 
 ### 4.6 驗證方式
@@ -157,10 +209,27 @@ cherylgame/
 * 讀到第 5 關存檔時正確生成魔王。
 * `sandbox="allow-scripts"` iframe：遊戲正常啟動、無法存檔，但 Game Over 仍可用記憶體中的 `checkpoint` 從本關重來。
 
+2026-09-28 改為 v2 後，以 Claude 內建瀏覽器 (Chromium) 實測以下項目，沒有未攔截的例外（唯一的 console error 是預覽環境連不到 Google Tag Manager）：
+* 答對怪物 +10 XP +5 🪙；寶箱另得道具；子彈題沒有獎勵；答錯只扣血。答題統計（總數、各運算、連續答對）正確累計。
+* 關卡中途的存檔：`profile` 已更新，`run` 仍是進關當下的 HP 與道具。
+* 過關：顯示過關選單；進入商店購買後金幣扣除、道具增加，`run` 與 `checkpoint` 都包含買到的道具；買不起的商品按鈕停用；商店開著時按數字鍵 1 不會使用藥水。
+* 重新整理：歡迎視窗顯示 Stage N，經驗值、金幣、鑽石、成就、道具都正確讀回。
+* 暫停中（歡迎視窗）無法使用護盾；恢復後可以使用。
+* 累計 50 XP 升到 Lv 2，顯示升級提示。
+* Game Over 顯示經驗值；從本關重來會回到進關時的 HP 與道具，經驗值不回溯；New Game 回到第 1 關，經驗值、金幣、鑽石保留。
+* 魔王：前 4 擊各 +10 XP +5 🪙，最後一擊 +60 XP +35 🪙，解鎖「第一次打倒魔王」。
+* v1 存檔（第 12 關、320 分）：轉成 320 XP（Lv 4），道具與 HP 保留，並解鎖「抵達第 10 關」；隨即以 v2 格式寫回。
+* 不合法的存檔：非 JSON、`v` 為 3、v1 的 `score` 為負或 `level` 為 0 → 無存檔；v2 的 `run` 不合格時只丟掉 `run`，`profile` 保留；`profile` 中的負數、字串、不認識的欄位與成就 id 被丟棄或改為預設值。
+* 讓 `window.localStorage` 丟出 `SecurityError`（模擬 sandbox iframe）：讀檔、答題、過關、商店購買都正常，進度保留在記憶體中。
+* 手機寬度 (375px)：HUD 換成三行，文字不重疊；商店四個商品排成 2×2，名稱不斷行；提示訊息顯示在 HUD 下方。
+* Playwright 測試 (`private/*.js`) 本次沒有執行：這台電腦沒有安裝 `node_modules`。
+
 ### 4.7 存檔的限制
 * 存檔只存在「該瀏覽器 + 該網址來源 (origin)」。換裝置、換瀏覽器、無痕模式都不會帶過去。
 * 正式網址只有 `https://mathrpg.mumuisland.com/`（Cloudflare Pages）。舊的 `https://busyfather357.github.io/cherylgame/` 將關閉，不需考慮兩個網域之間的存檔同步。
 * iOS Safari：若 7 天內沒有造訪本網站，可能會清除 `localStorage`（加到主畫面的 Web App 不受此限）。
+* 以上限制同樣適用於經驗值、金幣、鑽石與成就。目前鑽石沒有用途，影響不大；之後若鑽石來自看廣告，玩家因此失去鑽石的觀感會差很多，屆時需要考慮存檔碼匯出／匯入或雲端存檔（見 6.6）。
+* 資料都在前端，玩家可以用開發者工具修改數值。單機、沒有排行榜、鑽石不能花錢買的情況下可以接受。
 
 ## 5. iframe 嵌入 (private/iframe.txt) 與限制
 
@@ -183,7 +252,7 @@ cherylgame/
 3. **（2026-09-28 已修正）src 指向 github.io 而非專屬網域**：嵌入版與直連版的存檔、Google Analytics 數據分散在兩個網域。已改為 `https://mathrpg.mumuisland.com/`。
 
 ### 5.3 尚未處理：高度 288px 太小
-地圖只有 5 列（上下是牆，可走 3 列），HUD 會蓋住最上排；答題視窗超出 iframe 高度，標題與答題回饋文字被裁切。屬於版面問題，與存檔無關。
+地圖只有 5 列（上下是牆，可走 3 列），HUD 會蓋住最上排；答題視窗超出 iframe 高度，標題與答題回饋文字被裁切。屬於版面問題，與存檔無關。加入經驗值與貨幣後，過關選單同樣會被裁切；商店視窗最高為畫面的 90%，超出時可以捲動。
 
 ### 5.4 各種開啟方式的存檔行為
 以 `localhost` / `127.0.0.1` 模擬同站與跨站嵌入，於 Chrome 實測：
@@ -194,3 +263,84 @@ cherylgame/
 | 以現行語法嵌在自家網站（`*.mumuisland.com`，同站） | 正常 | 是 |
 | 以現行語法嵌在別人的網站（跨站） | 正常 | 否。瀏覽器依外層網站分開存放，每個網站各一份；Safari 的限制可能更嚴格 |
 | 仍使用舊語法 `sandbox="allow-scripts"` 的網站 | 無法保留（自動停用）；同一次遊玩中 Game Over 仍可從本關重來 | — |
+
+## 6. 經驗值、貨幣、商店與成就
+
+2026-09-28 實作。每個系統一個檔案，放在 `public/js/`；永久資料的存檔規則見第 4 節。
+
+| 檔案 | 內容 | 可調整的數值 |
+|---|---|---|
+| `experience.js` | 經驗值、角色等級、HUD 的等級與進度條 | `XP_REWARDS`、`xpForLevel()` |
+| `currency.js` | 金幣、鑽石、HUD 的金幣與鑽石 | `GOLD_REWARDS` |
+| `achievements.js` | 答題統計、成就定義與解鎖 | `ACHIEVEMENTS` |
+| `shop.js` | 商店視窗與購買 | `SHOP_PRICES` |
+
+維護者決定（2026-09-28）：
+* 分數 (Score) 由經驗值取代。
+* 角色等級目前只是記錄，不給任何能力加成。
+* 商店販售道具會讓遊戲變簡單，可以接受，之後再調整價格與功能。
+* 鑽石目前沒有用途，先建立成就系統的架構。
+* New Game 保留經驗值、金幣、鑽石與成就。
+
+### 6.1 獎勵數值
+「答對一題」才給獎勵，答錯不扣經驗值與金幣。`checkAnswer()` 依題目來源決定獎勵類型，再從兩張表取值：
+
+| 題目來源 | 獎勵類型 | 經驗值 | 金幣 |
+|---|---|---|---|
+| 怪物 | `monster` | 10 | 5 |
+| 寶箱（另得 1 個隨機道具） | `chest` | 10 | 5 |
+| 魔王，還沒倒下的每一擊 | `bossHit` | 10 | 5 |
+| 魔王，最後一擊 | `bossDefeat` | 60 | 35 |
+| 子彈 | 無 | 0 | 0 |
+
+一般關卡（4 隻怪物 + 1 個寶箱）約得 50 經驗值、25 金幣；魔王關約得 100 經驗值、55 金幣。
+
+### 6.2 經驗值與角色等級 (experience.js)
+* 存檔只存累計經驗值 `profile.xp`，等級由 `getPlayerLevel()` 換算，不會出現兩者不一致。
+* 升到第 L 級需要累計 `xpForLevel(L) = 25 × L × (L − 1)`：每升一級所需比上一級多 50（Lv2: 50、Lv3: 150、Lv4: 300、Lv5: 500、Lv10: 2250）。
+* 升級時顯示提示「⭐ Level Up! Lv N」。
+* HUD 顯示 `Lv N` 與升級進度條，進度條上是累計經驗值；滑鼠停在上面會顯示還差多少經驗值升級。
+
+### 6.3 貨幣與成就 (currency.js、achievements.js)
+* **金幣**：`addGold()`、`spendGold()`（不夠時不扣款並回傳 false）。
+* **鑽石**：只能從成就取得，目前沒有用途。所有鑽石來源都經過 `addDiamonds()`；之後接上獎勵廣告時也從這裡發放。
+* **答題統計** `profile.stats`：總答對／答錯、目前與最長連續答對、各運算（`+`、`-`、`*`）的答對／答錯、打倒魔王次數、到達的最高關卡。由 `recordAnswer()`、`recordBossDefeated()`、`recordStageReached()` 累計；連續答對跨局保留，答錯才歸零。
+* **成就**：`ACHIEVEMENTS` 每一筆有 `id`、`name`、`diamonds` 與 `isDone(stats)`。每次統計變動後 `checkAchievements()` 檢查所有未解鎖的成就，達成時記錄解鎖時間、給鑽石、顯示「🏆 名稱 +N 💎」。目前的成就：
+
+| id | 名稱 | 鑽石 |
+|---|---|---|
+| `first_correct` | 第一次答對 | 1 |
+| `correct_100` | 累計答對 100 題 | 3 |
+| `streak_10` | 連續答對 10 題 | 2 |
+| `multiply_50` | 乘法答對 50 題 | 3 |
+| `first_boss` | 第一次打倒魔王 | 3 |
+| `stage_10` | 抵達第 10 關 | 3 |
+
+* 新增成就只要在 `ACHIEVEMENTS` 加一筆。需要新的統計時，在 `createEmptyStats()` 加欄位並在 record 函式中累計；舊存檔會自動補上預設值。**`id` 存在存檔裡，上線後不要改名。**
+* 從 v1 存檔轉換的玩家統計從 0 開始；讀到第 10 關以上的存檔時，第一次 `startLevel()` 就會解鎖「抵達第 10 關」。
+* 還沒有成就清單畫面。
+
+### 6.4 過關選單與商店 (shop.js)
+* 過關後 `update()` 先進入下一關（`startLevel()` 會存下進關當下的進度），再呼叫 `showStageClear()` 暫停並顯示過關選單。
+* 按 `Shop 🛒` 開啟商店：顯示持有金幣與道具，四種道具各一個購買按鈕，買不起的按鈕停用；按 `Stage N ▶️` 離開商店並開始本關。
+* **只在進關時開放**（`openShop()` 檢查 `levelTouched`）：購買後的道具會寫進 `checkpoint`，從本關重來時仍然保留。如果關卡中途也能買，重新整理或從本關重來就會出現「金幣扣了、道具沒了」或「用掉的道具又回來」的情況。
+* 商店開著時 `shopOpen` 為 true，`useItem()` 不作用，避免玩家按數字鍵以為是在購買。
+
+| 道具 | 價格 |
+|---|---|
+| 恢復藥水 | 40 |
+| 神速靴 | 20 |
+| 提示卷軸 | 30 |
+| 無敵護盾 | 30 |
+
+### 6.5 設計原則
+* 鑽石不能換取「跳過數學」的能力（例如提示卷軸、復活），否則之後接上廣告時會變成「看廣告就能少做題目」，與遊戲目的相反。建議鑽石之後只用於外觀（例如用 emoji 做寵物、帽子、地圖主題）。
+* 獎勵只跟著「答對一題」給。寶箱會隨讀檔重生，不要額外多給經驗值或金幣（見 4.1）。
+
+### 6.6 之後：獎勵廣告換鑽石（尚未實作）
+2026-09-28 評估時整理的注意事項：
+* **管道**：網頁遊戲的獎勵廣告主要是 Google AdSense 的 H5 Games Ads（Ad Placement API，`adBreak({ type: 'reward' })`），需另外申請；或上架到 Poki、CrazyGames 等遊戲平台，改用它們的 SDK。
+* **兒童政策**：本站以兒童為對象，Google 要求標記為兒童導向，只能放非個人化廣告；美國 COPPA、歐盟 GDPR 兒童條款等要先確認。建議看廣告前加家長確認、設每日次數上限，且只在廣告確實看完（`adViewed`）時才呼叫 `addDiamonds()`。
+* **CSP**：目前 `default-src 'self'`，需要開放廣告網域的 script、frame、img、connect，並執行 `verify_csp.js`。
+* **iframe 嵌入版**：現行嵌入語法沒有 `allow-popups`，廣告點擊會失效；嵌入版（`window.self !== window.top`）建議不顯示看廣告按鈕。
+* **存檔**：看廣告換到的鑽石必須立即存檔（`addDiamonds()` 已經會）。`localStorage` 可能被清除（見 4.7），可考慮不需帳號的存檔碼匯出／匯入。

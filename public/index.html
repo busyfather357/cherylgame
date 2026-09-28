@@ -62,8 +62,15 @@
             <span class="heart">❤️</span>
             <span class="heart">❤️</span>     
         </div>         
-        <div class="level" id="level-display">Level: 1</div>         
-        <div class="score" id="score-display">Score: 0</div>     
+        <div class="level" id="level-display">Stage 1</div>
+        <div class="xp" id="xp-display">
+            <span id="xp-level">Lv 1</span>
+            <span class="xp-bar"><span id="xp-bar-fill"></span><span id="xp-bar-text">0 XP</span></span>
+        </div>
+        <div class="wallet">
+            <span id="gold-display">🪙 0</span>
+            <span id="diamond-display">💎 0</span>
+        </div>
         <div id="inventory-bar">
             <span id="inv-potion" class="inv-item">🧪 x0</span>
             <span id="inv-boots" class="inv-item">🥾 x0</span>
@@ -97,9 +104,29 @@
             </div>
             <button id="hint-btn" class="hint-btn" type="button" style="display: none;">📜 Hint Scroll (x0)</button>
             <div id="math-feedback"></div>
-        </div>     
-    </div>     
-    <canvas id="game"></canvas>     
-    <script src="script.js"></script> 
+        </div>
+    </div>
+    <div id="shop-overlay">
+        <div id="shop-modal">
+            <h2 id="shop-title">Shop 🛒</h2>
+            <div id="shop-gold">🪙 0</div>
+            <div id="shop-inventory"></div>
+            <div class="answers-grid" id="shop-items">
+                <!-- 商品按鈕由 js/shop.js 產生 -->
+            </div>
+            <div id="shop-feedback"></div>
+            <button id="shop-close" class="answer-btn" type="button">Start ▶️</button>
+        </div>
+    </div>
+    <div id="toast-container"></div>
+    <canvas id="game"></canvas>
+    <!-- 各系統檔案載入時不會呼叫 script.js 的函式；script.js 一執行就會讀檔並開始第 1 關，所以放最後 -->
+    <!-- achievements.js 必須在 save.js 之前 (save.js 載入時就用到 createEmptyStats()) -->
+    <script src="js/experience.js"></script>
+    <script src="js/currency.js"></script>
+    <script src="js/achievements.js"></script>
+    <script src="js/shop.js"></script>
+    <script src="js/save.js"></script>
+    <script src="script.js"></script>
 </body> 
 </html>
