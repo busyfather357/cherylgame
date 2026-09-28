@@ -19,10 +19,11 @@ cherylgame/
 │   ├── verify.js               # Playwright 測試：自動觸發 Level 5 Boss 關卡並截圖驗證
 │   ├── verify_csp.js           # Playwright 測試：驗證 CSP (內容安全策略) 與網頁載入有無 Console Error
 │   ├── boss_level.png          # 測試產出：Boss 關卡 (Level 5) 畫面截圖
-│   └── iframe.txt              # 提供給外部網站嵌入用的 iframe 語法 (限制見第 5 節)
-├── doc/
-│   ├── system_architecture.md  # 本系統架構與設計文件
-│   └── item_system.md          # 道具系統設計文件
+│   ├── iframe.txt              # 提供給外部網站嵌入用的 iframe 語法 (限制見第 5 節)
+│   └── doc/
+│       ├── system_architecture.md  # 本系統架構與設計文件
+│       └── item_system.md          # 道具系統設計文件
+├── AGENTS.md                   # 給 AI Agent 的工作指引 (執行方式、程式慣例、注意事項)
 ├── README.md                   # 專案基礎說明文件
 ├── package.json                # Node.js 依賴管理 (定義 Playwright 等測試套件)
 ├── package-lock.json           # 鎖定 npm 依賴版本
@@ -69,15 +70,17 @@ cherylgame/
 * **選項生成**：產生 1 個正確答案與 3 個隨機干擾選項，並洗牌打亂順序。
 * **獎懲機制**：
     * **答對**：加 10 分，消滅該怪物（若是 Boss 則扣除其生命值並將其隨機傳送）。恢復遊戲。
-    * **答錯**：扣除 1 顆愛心 (HP)，觸發物理擊退效果 (Knockback)，強制玩家往後退一段距離避免連續碰撞。若 HP 歸零則觸發 Game Over 並重置進度（存檔機制實作後改為可從關卡起點重來，見 4.5）。
+    * **答錯**：扣除 1 顆愛心 (HP)，觸發物理擊退效果 (Knockback)，強制玩家往後退一段距離避免連續碰撞。若 HP 歸零則觸發 Game Over；第 2 關以後可選擇從本關起點重來或從頭開始（見 4.5）。
 
 ## 3. UI/UX 介面設計 (style.css & index.html)
 
 * **HUD 狀態列**：位於畫面上方，顯示當前血量 (❤️)、關卡層數 (Level) 與分數 (Score)，使用文字陰影提升在各種底色下的可讀性。
 * **Mobile-First 控制區**：透過 CSS 媒體查詢 `@media (hover: none) and (pointer: coarse)` 自動判斷裝置。若為觸控螢幕，則顯示左下角 D-Pad 與右下角 Action 按鈕。
-* **數學題庫彈窗**：使用絕對定位覆蓋於 Canvas 之上，採防呆設計（`isAnswering` 狀態鎖），防止玩家連點造成重複計分或錯誤判定。
+* **數學題庫彈窗**：使用絕對定位覆蓋於 Canvas 之上，採防呆設計（`isAnswering` 狀態鎖），防止玩家連點造成重複計分或錯誤判定。同一個視窗也用來顯示 Game Over 與「歡迎回來」選單（見 4.5）。
 
-## 4. 存檔機制 (Save System)【規劃中，尚未實作】
+## 4. 存檔機制 (Save System)
+
+2026-09-28 實作於 `public/script.js` 的「存檔」區段（位於 `startLevel()` 之前）。
 
 ### 4.1 方案：關卡起點存檔 (Checkpoint)
 * 每次**進入新關卡**時，把當下的 `level`、`score`、`hp`、`inventory` 寫入瀏覽器的 `localStorage`。
@@ -106,30 +109,53 @@ cherylgame/
     * `inventory` 以預設值 `{ potion: 0, boots: 0, scroll: 0, shield: 0 }` 為底，只合併已知道具、非負整數的欄位；將來新增道具時，舊存檔不會壞掉。
 * **所有 `localStorage` 存取都必須包在 `try/catch` 裡。** 在 sandbox iframe 中，連讀取 `window.localStorage` 這個屬性都會丟出 `SecurityError`（見第 5 節）；`script.js` 在最外層直接執行，沒有攔截的話整個遊戲會無法啟動。失敗時靜默退化為「不存檔」模式，遊戲照常進行。
 
-### 4.4 程式整合點 (script.js)
-* **寫入 `saveProgress()`**：放在 `startLevel()` 內。這一個位置就涵蓋所有呼叫端：
+### 4.4 程式結構 (public/script.js)
+| 名稱 | 作用 |
+|---|---|
+| `ITEM_TYPES`、`SAVE_KEY`、`SAVE_VERSION` | 檔案開頭的常數。`ITEM_TYPES` 同時用於空道具欄、存檔驗證與寶箱掉落，新增道具只需改這裡 |
+| `checkpoint` | 記憶體中「最近一次進關時」的進度。`localStorage` 無法使用時（例如 sandbox iframe），Game Over 仍能用它從本關重來 |
+| `saveProgress()` | 更新 `checkpoint` 並寫入 `localStorage`。只在 `startLevel()` 內呼叫 |
+| `loadProgress()` | 處理 `?newgame`，讀取並套用存檔。在檔案中第一次呼叫 `startLevel()` 之前執行 |
+| `readSave()`、`parseSave()`、`clearSave()` | `localStorage` 存取（全部包 `try/catch`）與 4.3 的驗證規則 |
+| `applyProgress()` | 把進度寫回 `gameState`，道具欄會複製一份，避免遊戲中修改到 `checkpoint` |
+| `restartFrom(progress)` | 從指定進度重新開始一關：套用進度 → 清除道具計時 → `startLevel()` → `resumeGame()`。`resetGame()` 與「從本關重來」共用 |
+| `showWelcomeBack()`、`showMenuButtons()` | 借用數學題視窗顯示選單；`showGameOver()` 也改用 `showMenuButtons()` |
+
+* **寫入時機**：`saveProgress()` 放在 `startLevel()` 內，這一個位置就涵蓋所有呼叫端：
     * 初次啟動（檔案中第一次呼叫 `startLevel()`）
     * 過關（`update()` 中 `allCleared` 分支，`level += 1` 後）
-    * Play Again／從頭開始（`resetGame()`）
+    * 從頭開始／從本關重來（`restartFrom()`）
     * 視窗縮放重建地圖（`handleResize()`）：只在本關尚未觸發題目時發生，數值與上次存檔相同，重存無害。
-* **讀取 `loadProgress()`**：在檔案中**第一次呼叫 `startLevel()` 之前**，把存檔寫回 `gameState`。魔王關判斷（`spawnEnemies()` 的 `level % 5`）與地板配色（`drawWorld()`）才會一開始就用正確的關卡數。
-* **UI 時序限制**：「歡迎回來」視窗與 `updateHUD()` 必須放在檔案最末端 HUD 初始化之後才執行。`hpDisplayCache`、`isAnswering` 等變數以 `let` 宣告在檔案中段，第一次 `startLevel()` 執行時它們還不能使用（TDZ），提早呼叫 `updateHUD()`／`updateHintButton()` 會丟出 `ReferenceError`，遊戲直接停止。
-* 預估改動：`script.js` 約 60～80 行，不需新增檔案或改動架構。
+* **讀取時機**：`loadProgress()` 必須在第一次 `startLevel()` 之前，魔王關判斷（`spawnEnemies()` 的 `level % 5`）與地板配色（`drawWorld()`）才會一開始就用正確的關卡數。
+* **UI 時序限制**：`showWelcomeBack()` 放在檔案最末端 `updateHUD()` 初始化之後。`hpDisplayCache`、`isAnswering` 等變數以 `let` 宣告在檔案中段，第一次 `startLevel()` 執行時它們還不能使用（TDZ），提早呼叫 `updateHUD()`／`updateHintButton()` 會丟出 `ReferenceError`，遊戲直接停止。同理，`checkpoint` 必須宣告在第一次 `startLevel()` 之前。
 
 ### 4.5 玩家流程 (UX)
 * **開場**：
-    * 沒有存檔，或存檔在第 1 關 → 維持現狀，直接開始遊戲。
-    * 存檔在第 2 關以上 → 暫停遊戲，借用數學題視窗（與 `showGameOver()` 相同做法）顯示「歡迎回來！」，提供兩個按鈕：「繼續第 N 關」、「從頭開始」（呼叫 `resetGame()`）。
-* **Game Over**：**不清除存檔**。Game Over 視窗提供「從第 N 關重來」與「從頭開始」兩個按鈕（N = 1 時只顯示原本的 Play Again）。
-    * 新增 `restartFromCheckpoint()`：讀回存檔 → 清除道具計時 → `startLevel()` → `resumeGame()`。
+    * 沒有存檔，或存檔在第 1 關 → 維持原樣，直接開始遊戲（第 1 關的存檔必定是 0 分、滿血、無道具，等同新遊戲）。
+    * 存檔在第 2 關以上 → 暫停遊戲，顯示「Welcome Back! / Level N」與兩個按鈕：`Continue ▶️`（`resumeGame()`）、`New Game 🔄`（`resetGame()`）。
+    * 歡迎視窗沒有題目，所以會停用提示卷軸（設 `hintUsed = true`，下次出題時重設），避免按鍵 3 把選單按鈕當成錯誤答案隱藏。
+* **Game Over**：**不清除存檔**。
+    * 第 2 關以上：顯示 `Retry Level N 🔁`（`restartFrom(checkpoint)`）與 `New Game 🔄`。
+    * 第 1 關：只顯示原本的 `Play Again 🔄`。
     * 理由：本遊戲以兒童練習數學為目的，從關卡起點重來比整個歸零的挫折感低。
-* **已知取捨**：關卡中途重新整理頁面，會回到該關起點，HP 也回到進關時的數值。對兒童遊戲可接受，不另外防範。
+* **已知取捨**：
+    * 關卡中途重新整理頁面，會回到該關起點，HP 也回到進關時的數值。對兒童遊戲可接受，不另外防範。
+    * 從本關重來時，HP 是進關時的數值；若進關時只剩 1 顆心，重來也只有 1 顆心。
 * **開發測試用**：網址加上 `?newgame` 時，忽略並清除存檔。Playwright 測試每次都使用全新的瀏覽器環境，不受存檔影響。
+* 選單文字沿用現有 UI 的英文風格（Math Challenge!、Game Over、Play Again）。
 
 ### 4.6 驗證方式
-* 直接開啟：玩到第 2 關以上 → 重新整理 → 出現「歡迎回來」並能回到同一關，分數、HP、道具一致。
-* 在 `sandbox="allow-scripts"` 的 iframe 中開啟：遊戲能正常啟動、Console 沒有未攔截的例外（存檔功能停用）。
-* 手動把 `localStorage` 內容改成亂碼或不合法的數值 → 遊戲視為無存檔、正常從第 1 關開始。
+2026-09-28 以 headless Chrome 實測以下 28 項全部通過，過程中沒有未攔截的例外或 console error：
+* 全新開始：第 1 關、不顯示歡迎視窗，寫入第 1 關存檔。
+* 過關：存下進入第 2 關當下的分數、HP、道具；關卡中途的變化不會被存。
+* 重新整理：顯示歡迎視窗並回到第 2 關起點；提示卷軸按鈕隱藏，按鍵 3 不會消耗卷軸；按 Continue 恢復遊戲。
+* Game Over：第 2 關以上可從本關重來（恢復進關時的數值）或從頭開始；第 1 關只有 Play Again。
+* 歡迎視窗按 New Game：回到第 1 關並覆蓋存檔。
+* 不合法的存檔（非 JSON、版本不符、`level` 為 0 或字串、`hp` 為 0、`score` 為負）→ 視為無存檔，從第 1 關開始。
+* `hp` 超過上限會被限制為 `MAX_HP`；負數、小數與不認識的道具欄位會被丟棄。
+* `?newgame`：忽略既有存檔並從第 1 關開始。
+* 讀到第 5 關存檔時正確生成魔王。
+* `sandbox="allow-scripts"` iframe：遊戲正常啟動、無法存檔，但 Game Over 仍可用記憶體中的 `checkpoint` 從本關重來。
 
 ### 4.7 存檔的限制
 * 存檔只存在「該瀏覽器 + 該網址來源 (origin)」。換裝置、換瀏覽器、無痕模式都不會帶過去。
@@ -138,24 +164,7 @@ cherylgame/
 
 ## 5. iframe 嵌入 (private/iframe.txt) 與限制
 
-### 5.1 現行語法
-```html
-<iframe
-  src="https://mathrpg.mumuisland.com/"
-  style="width:100%; height:288px; border:0;"
-  scrolling="no"
-  sandbox="allow-scripts">
-</iframe>
-```
-
-### 5.2 問題點（2026-09-25 以 Chrome 實測）
-`sandbox="allow-scripts"` 沒有搭配 `allow-same-origin`，瀏覽器會把 iframe 裡的遊戲當成「沒有來源」的頁面（`self.origin === "null"`），即使網址就是遊戲自己的網域。這跟放在哪個網域無關，只要用這段語法嵌入就會發生：
-1. **無法存檔**：讀取 `window.localStorage` 直接丟出 `SecurityError`（訊息：*The document is sandboxed and lacks the 'allow-same-origin' flag*）。若沒有依 4.3 包 `try/catch`，整個遊戲會無法啟動。
-2. **現存 bug — 角色去背失效，出現白框**：對「沒有來源」的頁面來說，`Pal_test.png` 屬於跨來源圖片；畫到 canvas 後 canvas 被標記為 tainted，`getImageData` 丟出 `SecurityError`，程式進入 fallback 直接使用未去背的原圖。直接開網址時正常，只有嵌入版會出現白框。
-3. **（2026-09-28 已修正）src 指向 github.io 而非專屬網域**：嵌入版與直連版的存檔、Google Analytics 數據分散在兩個網域。已改為 `https://mathrpg.mumuisland.com/`。
-4. **高度 288px 太小**：地圖只有 5 列（上下是牆，可走 3 列），HUD 會蓋住最上排；答題視窗超出 iframe 高度，標題與答題回饋文字被裁切。
-
-### 5.3 建議語法
+### 5.1 現行語法（2026-09-28 起）
 ```html
 <iframe
   src="https://mathrpg.mumuisland.com/"
@@ -164,16 +173,24 @@ cherylgame/
   sandbox="allow-scripts allow-same-origin">
 </iframe>
 ```
-* 加上 `allow-same-origin` 後，存檔與角色去背都恢復正常（已實測）。
 * **安全性**：Chrome 會對 `allow-scripts` + `allow-same-origin` 顯示警告（*can escape its sandboxing*）。這只在「遊戲頁面與外層頁面同源」時成立，因為此時遊戲可以經由 `parent.document` 移除自己的 `sandbox` 屬性。只要外層頁面不是 `mathrpg.mumuisland.com` 本身（例如 `www.mumuisland.com` 或其他人的部落格），瀏覽器的同源政策會阻止遊戲碰觸外層頁面；sandbox 其餘的限制（禁止把外層頁面導走、禁止彈出視窗、禁止送出表單）照樣有效。**規則：不要把這段 iframe 放在 `mathrpg.mumuisland.com` 自己的頁面裡。**
-* 高度建議另外調整（至少讓答題視窗完整顯示），屬於版面問題，與存檔無關。
+* 已經貼在其他網站上的舊語法不會自動更新，需要到各網站手動換成新語法。
 
-### 5.4 加上 `allow-same-origin` 後的存檔行為
+### 5.2 舊語法 `sandbox="allow-scripts"` 的問題（2026-09-25 以 Chrome 實測）
+舊語法沒有搭配 `allow-same-origin`，瀏覽器會把 iframe 裡的遊戲當成「沒有來源」的頁面（`self.origin === "null"`），即使網址就是遊戲自己的網域。這跟放在哪個網域無關，只要用舊語法嵌入就會發生：
+1. **（2026-09-28 已修正）無法存檔**：讀取 `window.localStorage` 直接丟出 `SecurityError`（訊息：*The document is sandboxed and lacks the 'allow-same-origin' flag*）。存檔程式已依 4.3 全部包 `try/catch`，所以仍使用舊語法的網站也能正常啟動遊戲，只是關掉頁面後進度不會保留。
+2. **（2026-09-28 已修正）角色去背失效，出現白框**：對「沒有來源」的頁面來說，`Pal_test.png` 屬於跨來源圖片；畫到 canvas 後 canvas 被標記為 tainted，`getImageData` 丟出 `SecurityError`，程式進入 fallback 直接使用未去背的原圖。
+3. **（2026-09-28 已修正）src 指向 github.io 而非專屬網域**：嵌入版與直連版的存檔、Google Analytics 數據分散在兩個網域。已改為 `https://mathrpg.mumuisland.com/`。
+
+### 5.3 尚未處理：高度 288px 太小
+地圖只有 5 列（上下是牆，可走 3 列），HUD 會蓋住最上排；答題視窗超出 iframe 高度，標題與答題回饋文字被裁切。屬於版面問題，與存檔無關。
+
+### 5.4 各種開啟方式的存檔行為
 以 `localhost` / `127.0.0.1` 模擬同站與跨站嵌入，於 Chrome 實測：
 
 | 玩家開啟方式 | 存檔 | 與直連版共用存檔 |
 |---|---|---|
 | 直接開 `mathrpg.mumuisland.com` | 正常 | — |
-| 嵌在自家網站（`*.mumuisland.com`，同站） | 正常 | 是 |
-| 嵌在別人的網站（跨站） | 正常 | 否。瀏覽器依外層網站分開存放，每個網站各一份；Safari 的限制可能更嚴格 |
-| 維持現行 `sandbox="allow-scripts"` | 無法存檔（依 4.3 自動停用） | — |
+| 以現行語法嵌在自家網站（`*.mumuisland.com`，同站） | 正常 | 是 |
+| 以現行語法嵌在別人的網站（跨站） | 正常 | 否。瀏覽器依外層網站分開存放，每個網站各一份；Safari 的限制可能更嚴格 |
+| 仍使用舊語法 `sandbox="allow-scripts"` 的網站 | 無法保留（自動停用）；同一次遊玩中 Game Over 仍可從本關重來 | — |
