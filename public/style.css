@@ -239,6 +239,20 @@
             margin: 20px 0;
             font-weight: bold;
         }
+        /* 填空題的空格 (js/questions.js 的 □) */
+        #math-question .blank {
+            display: inline-block;
+            width: 1em;
+            height: 0.9em;
+            border: 4px solid #333;
+            border-radius: 8px;
+            box-sizing: border-box;
+            vertical-align: -0.1em;
+        }
+        /* 手機上題目維持一行 */
+        @media (max-width: 480px) {
+            #math-question { font-size: 38px; }
+        }
         .answers-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;

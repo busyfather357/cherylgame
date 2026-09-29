@@ -7,6 +7,7 @@
 // 答對一題可得的金幣，鍵與 XP_REWARDS (experience.js) 相同。子彈題沒有獎勵
 const GOLD_REWARDS = {
     monster: 5,
+    ufo: 10,        // 🛸 飛碟會逃跑，抓到多給
     chest: 5,
     bossHit: 5,     // 魔王還沒倒下的每一擊
     bossDefeat: 35  // 打倒魔王的最後一擊 (一擊 5 + 擊敗獎勵 30)

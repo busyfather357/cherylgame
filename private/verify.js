@@ -13,7 +13,7 @@ const { chromium } = require('playwright');
     await page.evaluate(() => {
         gameState.level = 5;
         generateMap(gameState.level);
-        spawnEnemies(5);
+        spawnEnemies();
         updateHUD();
     });
 

@@ -1,5 +1,5 @@
-// 遊戲核心：畫布、地圖、敵人、碰撞、數學題、道具、選單與主迴圈。
-// 經驗值、貨幣、成就、商店、存檔放在 js/ 資料夾，index.html 會先載入它們再載入本檔。
+// 遊戲核心：畫布、地圖、碰撞、出題與答題、道具、選單與主迴圈。
+// 經驗值、貨幣、成就、商店、存檔、題目、章節設定、敵人行為放在 js/ 資料夾，index.html 會先載入它們再載入本檔。
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
@@ -94,7 +94,9 @@ const gameState = {
     paused: false,
     enemies: [],
     bullets: [],
-    bossHitsNeeded: 5,
+    hazards: [],         // 機器人的炸彈 (js/enemies.js)
+    bossHitsNeeded: 5,   // 魔王剩下的血量
+    bossDamage: 1,       // 這一題答對時魔王扣幾格血 (碰到時決定)
     currentChallengeType: null,
     map: [],
     cols: 0,
@@ -160,6 +162,7 @@ function generateMap(level) {
     // Center spawn point
     const centerX = Math.floor(gameState.cols / 2);
     const centerY = Math.floor(gameState.rows / 2);
+    const obstacleRate = getStageConfig(level).obstacleRate;
 
     while (true) {
         gameState.map = [];
@@ -176,7 +179,7 @@ function generateMap(level) {
                 }
                 // Random obstacles
                 else {
-                    row.push(Math.random() < 0.15 ? 1 : 0);
+                    row.push(Math.random() < obstacleRate ? 1 : 0);
                 }
             }
             gameState.map.push(row);
@@ -330,81 +333,38 @@ function getEmojiSprite(emoji) {
     return img;
 }
 
-function spawnEnemies(count) {
+// 依關卡設定 (js/stages.js) 生成敵人：魔王關只有魔王；其他關卡 1 個寶箱，其餘是怪物。需要在 generateMap() 之後呼叫
+function spawnEnemies() {
     gameState.enemies = [];
     gameState.bullets = [];
+    gameState.hazards = [];
 
-    const isBossLevel = gameState.level % 5 === 0;
+    const stage = getStageConfig(gameState.level);
 
-    if (isBossLevel) {
-        gameState.bossHitsNeeded = 5;
+    if (stage.boss) {
         const spawn = findSpawnTile();
-
         if (spawn) {
-            const icon = Math.random() > 0.5 ? '🐉' : '👹';
-            const vx = (Math.random() * 3) - 1.5;
-            const vy = (Math.random() * 3) - 1.5;
-
-            gameState.enemies.push({
-                x: spawn.x,
-                y: spawn.y,
-                width: 50,
-                height: 50,
-                type: 'boss',
-                icon: icon,
-                spriteImg: getEmojiSprite(icon),
-                vx: vx,
-                vy: vy,
-                active: true,
-                lastShotTime: 0
-            });
+            const boss = createBoss(stage.boss, stage.bossStars, spawn.x, spawn.y);
+            gameState.bossHitsNeeded = boss.maxHp;
+            gameState.enemies.push(boss);
         }
     } else {
-        for (let i = 0; i < count; i++) {
-            let isMonster = i !== 0; // Fix: Only 1 chest, others are monsters
-            let type = isMonster ? 'monster' : 'chest';
-            let icon = '🎁';
-            let vx = 0;
-            let vy = 0;
+        const chestSpawn = findSpawnTile();
+        if (chestSpawn) gameState.enemies.push(createChest(chestSpawn.x, chestSpawn.y));
 
-            if (isMonster) {
-                vx = (Math.random() * 2) - 1; // between -1 and 1
-                vy = (Math.random() * 2) - 1;
-
-                if (gameState.level === 1) {
-                    icon = '👾';
-                } else if (gameState.level === 2) {
-                    icon = Math.random() > 0.5 ? '🦀' : '🦈';
-                } else {
-                    const icons = ['👾', '🦀', '🦈'];
-                    icon = icons[Math.floor(Math.random() * icons.length)];
-                }
-            }
-
+        for (const kind of pickMonsterKinds(stage)) {
             const spawn = findSpawnTile();
-
-            if (spawn) {
-                gameState.enemies.push({
-                    x: spawn.x,
-                    y: spawn.y,
-                    width: 50,
-                    height: 50,
-                    type: type,
-                    icon: icon,
-                    spriteImg: getEmojiSprite(icon), // 新增這行：預先產生並儲存圖片物件
-                    vx: vx,
-                    vy: vy,
-                    active: true
-                });
-            }
+            if (spawn) gameState.enemies.push(createMonster(kind, stage.theme, spawn.x, spawn.y));
         }
     }
+
+    queueStageAnnouncements(stage, gameState.enemies);
 }
 
-// 存檔在 js/save.js。loadProgress() 必須在第一次 startLevel() 之前執行，魔王關判斷與地板配色才會用到存檔的關卡數
+// 存檔在 js/save.js。loadProgress() 必須在第一次 startLevel() 之前執行，關卡設定與地板配色才會用到存檔的關卡數
 function startLevel() {
     generateMap(gameState.level);
-    spawnEnemies(5);
+    spawnEnemies();
     gameState.levelTouched = false;
     saveProgress(); // 過關、重新開始、縮放重建地圖都會經過這裡
     recordStageReached(gameState.level);
@@ -513,6 +473,8 @@ function update(timestamp) {
         return;
     }
 
+    flushStageAnnouncements(); // 魔王登場、新怪物提示 (js/stages.js)
+
     if (timestamp < gameState.speedBoostUntil) {
         gameState.speed = 6;
     } else {
@@ -601,84 +563,40 @@ function update(timestamp) {
         height: drawH / 2
     };
 
+    // 敵人的移動與攻擊在 js/enemies.js
+    const frame = {
+        now: timestamp,
+        dt,
+        worldW,
+        worldH,
+        player: { x: playerRect.x + playerRect.width / 2, y: playerRect.y + playerRect.height / 2 }
+    };
+
     for (let i = 0; i < gameState.enemies.length; i++) {
-        let enemy = gameState.enemies[i];
+        const enemy = gameState.enemies[i];
+        if (!enemy.active) continue;
 
-        if (enemy.active) {
-            // 怪物或魔王自主移動
-            if (enemy.type === 'monster' || enemy.type === 'boss') {
-                const maxSpeed = enemy.type === 'boss' ? 2.5 : 1.5;
+        updateEnemy(enemy, frame);
 
-                // X 軸移動與碰撞
-                const moveX = enemy.vx * dt;
-                enemy.x += moveX;
-                if (isWallCollision(enemy) || enemy.x <= 0 || enemy.x + enemy.width >= worldW) {
-                    enemy.x -= moveX;
-                    enemy.vx *= -1;
-                }
+        // 碰到算什麼由敵人當下的狀態決定：出題、被撞 (跟子彈一樣)，或碰不到 (隱身)
+        const contact = getContactType(enemy);
+        if (!contact || !checkCollision(playerRect, enemy)) continue;
+        // 護盾擋得住怪物與衝撞，擋不住寶箱與魔王 (那是玩家要去碰的)
+        if (inGracePeriod || (isInvincible && (contact === 'monster' || contact === 'bullet'))) continue;
 
-                // Y 軸移動與碰撞
-                const moveY = enemy.vy * dt;
-                enemy.y += moveY;
-                if (isWallCollision(enemy) || enemy.y <= 0 || enemy.y + enemy.height >= worldH) {
-                    enemy.y -= moveY;
-                    enemy.vy *= -1;
-                }
-
-                // 偶爾隨機微調速度方向
-                if (Math.random() < 0.02 * dt) {
-                    enemy.vx += (Math.random() * 0.5) - 0.25;
-                    enemy.vy += (Math.random() * 0.5) - 0.25;
-
-                    // 限制最大速度
-                    enemy.vx = Math.max(-maxSpeed, Math.min(maxSpeed, enemy.vx));
-                    enemy.vy = Math.max(-maxSpeed, Math.min(maxSpeed, enemy.vy));
-                }
-
-                // 魔王發射子彈 (間隔改為 5000ms)
-                if (enemy.type === 'boss' && (!enemy.lastShotTime || timestamp - enemy.lastShotTime > 5000)) {
-                    enemy.lastShotTime = timestamp;
-
-                    const bossCenterX = enemy.x + enemy.width / 2;
-                    const bossCenterY = enemy.y + enemy.height / 2;
-                    const playerCenterX = playerRect.x + playerRect.width / 2;
-                    const playerCenterY = playerRect.y + playerRect.height / 2;
-
-                    const dx = playerCenterX - bossCenterX;
-                    const dy = playerCenterY - bossCenterY;
-                    const dist = Math.hypot(dx, dy);
-
-                    const bulletSpeed = 4;
-
-                    gameState.bullets.push({
-                        x: bossCenterX - 15, // center 30x30 bullet
-                        y: bossCenterY - 15,
-                        width: 30,
-                        height: 30,
-                        vx: (dx / dist) * bulletSpeed,
-                        vy: (dy / dist) * bulletSpeed,
-                        active: true
-                    });
-                }
-            }
-
-            if (checkCollision(playerRect, enemy)) {
-                if (inGracePeriod || (isInvincible && enemy.type === 'monster')) {
-                    // Skip collision
-                } else {
-                    gameState.paused = true;
-                    gameState.currentEnemyIndex = i;
-                    gameState.currentChallengeType = enemy.type;
-                    gameState.challengeSource = {
-                        x: enemy.x + enemy.width / 2,
-                        y: enemy.y + enemy.height / 2
-                    };
-                    triggerMathChallenge();
-                    break;
-                }
-            }
-        }
+        gameState.paused = true;
+        gameState.currentEnemyIndex = i;
+        gameState.currentChallengeType = contact;
+        gameState.bossDamage = contact === 'boss' ? getBossDamage(enemy) : 0;
+        gameState.challengeSource = {
+            x: enemy.x + enemy.width / 2,
+            y: enemy.y + enemy.height / 2
+        };
+        if (contact === 'bullet') resetBossState(enemy); // 犀牛王撞到玩家就停下來
+        triggerMathChallenge();
+        break;
     }
+    if (gameState.paused) return;
 
     // 更新子彈位置與碰撞
     for (let i = gameState.bullets.length - 1; i >= 0; i--) {
@@ -708,6 +626,18 @@ function update(timestamp) {
                 }
             }
         }
+    }
+    if (gameState.paused) return;
+
+    // 機器人的炸彈：碰到爆炸中的火焰跟被子彈打到一樣
+    updateHazards(timestamp);
+    const blastSource = findBlastHit(playerRect, timestamp);
+    if (blastSource && !isInvincible && !inGracePeriod) {
+        gameState.paused = true;
+        gameState.currentChallengeType = 'bullet';
+        gameState.challengeSource = blastSource;
+        triggerMathChallenge();
+        return;
     }
 
     // 檢查過關邏輯
@@ -750,6 +680,9 @@ function draw() {
 }
 
 function drawWorld() {
+    const timestamp = performance.now();
+    const theme = getStageConfig(gameState.level).theme; // 地板與障礙物的外觀 (js/stages.js)
+
     // 繪製地圖網格與障礙物
     for (let r = 0; r < gameState.rows; r++) {
         for (let c = 0; c < gameState.cols; c++) {
@@ -757,22 +690,11 @@ function drawWorld() {
             const tileY = r * TILE_SIZE;
 
             // 地板顏色
-            if (gameState.level === 1) {
-                ctx.fillStyle = '#4CAF50';
-            } else if (gameState.level === 2) {
-                ctx.fillStyle = '#F5DEB3';
-            } else {
-                ctx.fillStyle = '#2F4F4F';
-            }
+            ctx.fillStyle = theme.floor;
             ctx.fillRect(tileX, tileY, TILE_SIZE, TILE_SIZE);
 
             if (gameState.map[r] && gameState.map[r][c] === 1) {
-                let obstacleIcon = '🌲';
-                if (gameState.level === 2) {
-                    obstacleIcon = (r + c) % 2 === 0 ? '🌊' : '🪨';
-                } else if (gameState.level > 2) {
-                    obstacleIcon = '🧱';
-                }
+                const obstacleIcon = theme.obstacles[(r + c) % theme.obstacles.length];
                 const obstacleSprite = getEmojiSprite(obstacleIcon);
                 if (obstacleSprite && obstacleSprite.complete) {
                     ctx.drawImage(obstacleSprite, tileX, tileY, TILE_SIZE, TILE_SIZE);
@@ -780,28 +702,19 @@ function drawWorld() {
             }
 
             // Draw floor checkerboard pattern slightly to give depth
-            if (gameState.map[r] && gameState.map[r][c] === 0) {
-                if (gameState.level === 1) {
-                    ctx.fillStyle = '#45a049';
-                } else if (gameState.level === 2) {
-                    ctx.fillStyle = '#E6C280';
-                } else {
-                    ctx.fillStyle = '#3F5F5F';
-                }
-                if ((r + c) % 2 === 0) {
-                   ctx.fillRect(tileX, tileY, TILE_SIZE, TILE_SIZE);
-                }
+            if (gameState.map[r] && gameState.map[r][c] === 0 && (r + c) % 2 === 0) {
+                ctx.fillStyle = theme.checker;
+                ctx.fillRect(tileX, tileY, TILE_SIZE, TILE_SIZE);
             }
         }
     }
 
-    // 畫出敵人
+    drawHazards(timestamp);
+
+    // 畫出敵人 (js/enemies.js)
     for (let enemy of gameState.enemies) {
         if (enemy.active) {
-            // 改用 drawImage 繪製已經轉換好的 SVG Emoji 圖片
-            if (enemy.spriteImg && enemy.spriteImg.complete) {
-                ctx.drawImage(enemy.spriteImg, Math.floor(enemy.x), Math.floor(enemy.y), Math.floor(enemy.width), Math.floor(enemy.height));
-            }
+            drawEnemy(enemy, timestamp);
 
             // 繪製敵人紅框 (除錯用)
             if (gameConfig.showDebugBox) {
@@ -812,10 +725,10 @@ function drawWorld() {
         }
     }
 
-    // 畫出子彈
+    // 畫出子彈 (火球、墨汁、毒液)
     for (let bullet of gameState.bullets) {
         if (bullet.active) {
-            const bulletSprite = getEmojiSprite('🔥');
+            const bulletSprite = getEmojiSprite(bullet.icon || '🔥');
             if (bulletSprite && bulletSprite.complete) {
                 ctx.drawImage(bulletSprite, Math.floor(bullet.x), Math.floor(bullet.y), Math.floor(bullet.width), Math.floor(bullet.height));
             }
@@ -839,8 +752,6 @@ function drawWorld() {
     
     const dx = gameState.x;
     const dy = gameState.y;
-
-    const timestamp = performance.now();
 
     ctx.save();
 
@@ -900,42 +811,20 @@ function triggerMathChallenge() {
     gameState.hintUsed = false;
     gameState.levelTouched = true;
 
-    // Generate Question
-    const ops = ['+', '-', '*'];
-    const op = ops[Math.floor(Math.random() * ops.length)];
-    let num1, num2, correctAnswer;
-
-    if (op === '+') {
-        num1 = Math.floor(Math.random() * 50) + 10;
-        num2 = Math.floor(Math.random() * 50) + 10;
-        correctAnswer = num1 + num2;
-    } else if (op === '-') {
-        num1 = Math.floor(Math.random() * 50) + 20;
-        num2 = Math.floor(Math.random() * (num1 - 10)) + 1; // Ensure positive result
-        correctAnswer = num1 - num2;
-    } else {
-        num1 = Math.floor(Math.random() * 9) + 1;
-        num2 = Math.floor(Math.random() * 9) + 1;
-        correctAnswer = num1 * num2;
+    // 題目與選項 (js/questions.js)，第 11 關起變難
+    const { op, text, answer: correctAnswer, choices } = generateQuestion(gameState.level);
+    // 填空題的 □ 畫成方框 (遊戲字型沒有 □，備用字型的 □ 很小)
+    const [beforeBlank, afterBlank] = text.split('□');
+    questionEl.textContent = beforeBlank;
+    if (afterBlank !== undefined) {
+        const blank = document.createElement("span");
+        blank.className = "blank";
+        questionEl.append(blank, afterBlank);
     }
-
-    questionEl.textContent = `${num1} ${op} ${num2} = ?`;
-
-    // Generate Answers
-    let answers = [correctAnswer];
-    while (answers.length < 4) {
-        let wrongAnswer = correctAnswer + (Math.floor(Math.random() * 21) - 10);
-        if (wrongAnswer !== correctAnswer && !answers.includes(wrongAnswer) && wrongAnswer >= 0) {
-            answers.push(wrongAnswer);
-        }
-    }
-
-    // Shuffle answers
-    answers.sort(() => Math.random() - 0.5);
 
     // Render answer buttons
     answersContainer.innerHTML = '';
-    answers.forEach(ans => {
+    choices.forEach(ans => {
         const btn = document.createElement("button");
         btn.className = "answer-btn";
         btn.textContent = ans;
@@ -1149,27 +1038,27 @@ function checkAnswer(selected, correct, op) {
         if (gameState.currentChallengeType === 'bullet') {
             // 子彈題答對只是避免扣血
         } else if (gameState.currentChallengeType === 'boss') {
-            gameState.bossHitsNeeded -= 1;
+            const boss = gameState.enemies[gameState.currentEnemyIndex];
+            gameState.bossHitsNeeded = Math.max(0, gameState.bossHitsNeeded - gameState.bossDamage);
+            if (gameState.bossDamage > 1) message = "Critical Hit! 💥"; // 犀牛王暈倒時算 2 下
 
             if (gameState.bossHitsNeeded > 0) {
                 rewardType = 'bossHit';
-                // Teleport boss (避開玩家周圍)
-                const boss = gameState.enemies[gameState.currentEnemyIndex];
-                const spawn = findSpawnTile();
-                if (spawn) {
-                    boss.x = spawn.x;
-                    boss.y = spawn.y;
-                }
+                teleportBoss(boss); // 避開玩家周圍
             } else {
                 rewardType = 'bossDefeat';
-                gameState.enemies[gameState.currentEnemyIndex].active = false;
+                defeatBoss(boss);
                 recordBossDefeated();
             }
         } else {
-            rewardType = gameState.currentChallengeType; // 'monster' 或 'chest'
-            gameState.enemies[gameState.currentEnemyIndex].active = false;
+            const enemy = gameState.enemies[gameState.currentEnemyIndex];
+            rewardType = enemy.reward; // 'monster'、'chest' 或 'ufo'
 
-            if (gameState.currentChallengeType === 'chest') {
+            if (!hitMonster(enemy)) {
+                // 河豚還要再答對一次：把玩家彈開，避免保護時間結束後馬上又碰到
+                applyKnockback(gameState.challengeSource);
+                message = "Correct! ✨ One more time!";
+            } else if (gameState.currentChallengeType === 'chest') {
                 const drop = ITEM_TYPES[Math.floor(Math.random() * ITEM_TYPES.length)];
                 gameState.inventory[drop] += 1;
                 message = `Correct! ✨ Obtained 1x ${ITEM_INFO[drop].name}`;
