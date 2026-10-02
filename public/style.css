@@ -298,40 +298,103 @@
         }
 
         /* 商店 (js/shop.js) */
+        /* 背景圖 shop_bg.webp：老闆娘站在圖片中央，商店視窗放在她旁邊 (橫向畫面在右、直向畫面在下)，不擋住她 */
+        #shop-overlay {
+            box-sizing: border-box;
+            background: #3d4f73 url("shop_bg.webp") 55% top / cover no-repeat; /* 圖片載入前、或瀏覽器不支援 WebP 時顯示底色 */
+        }
+        /* 只在視窗靠的那一側留白，另一個方向的寬度不變 (手機上道具名稱才不會斷行) */
+        @media (orientation: landscape) {
+            #shop-overlay {
+                justify-content: flex-end;
+                padding-right: 20px;
+                /* 靠右對齊、寬度至少 1200px：畫面窄時放大圖片並裁掉左邊，老闆娘才會在視窗左邊露出來 */
+                background-position: right 12%;
+                background-size: max(100%, 1200px) auto;
+            }
+        }
+        @media (orientation: portrait) {
+            #shop-overlay {
+                align-items: flex-end;
+                padding-bottom: 20px;
+            }
+        }
         #shop-modal {
             max-height: 90%;
             overflow-y: auto;
             box-sizing: border-box;
             padding: 20px; /* 比題目視窗窄，手機上道具名稱才不會斷行 */
+            /* 毛玻璃：半透明並把透出來的底圖模糊，文字才看得清楚 (不支援模糊的瀏覽器只有半透明) */
+            background: rgba(255, 248, 220, 0.55);
+            -webkit-backdrop-filter: blur(8px);
+            backdrop-filter: blur(8px);
         }
+        /* 標題與持有金幣放同一行，面板比較矮 */
+        #shop-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+        #shop-title { margin: 0; }
         #shop-gold {
             font-size: 32px;
             font-weight: bold;
             color: #b8860b;
         }
-        #shop-inventory {
-            margin-top: 8px;
-            font-size: 18px;
-            color: #555;
-            white-space: pre-wrap;
-        }
+        #shop-items { margin-top: 14px; }
         .shop-item-btn {
+            position: relative; /* 持有數量 (.shop-item-count) 對齊按鈕右上角 */
             padding: 10px 6px;
             font-size: 18px;
-            white-space: pre-line; /* 第一行道具名稱，第二行價格 */
         }
+        .shop-item-icon { margin-right: 4px; }
+        .shop-item-price { display: block; } /* 第一行圖示與名稱，第二行價格 */
+        /* 持有數量：凸出按鈕右上角的小標籤 */
+        .shop-item-count {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            padding: 1px 7px;
+            border-radius: 10px;
+            background: #8b4513;
+            color: #fff;
+            font-size: 14px;
+        }
+        /* 買不起：面板是半透明的，用 opacity 變淡會透出底圖，改成灰色 */
         .shop-item-btn:disabled {
-            opacity: 0.45;
+            background: #e9dfcf;
+            color: #a99c8a;
+            border-color: #cdb99c;
+            filter: grayscale(0.7);
             cursor: not-allowed;
         }
+        /* 寬度夠 (橫向畫面、平板) 時四個道具排成一列，面板更矮；按鈕內的圖示、名稱、價格改成上下排 */
+        @media (min-width: 460px) {
+            #shop-items {
+                grid-template-columns: repeat(4, 1fr);
+                gap: 10px;
+            }
+            .shop-item-btn {
+                padding: 6px 2px;
+                font-size: 16px;
+            }
+            .shop-item-icon {
+                display: block;
+                margin-right: 0;
+                font-size: 22px;
+            }
+        }
         #shop-feedback {
-            margin-top: 12px;
+            margin-top: 8px;
             min-height: 24px;
+            line-height: 24px; /* 跟 min-height 一樣：出現文字時面板不會長高，按鈕才不會移位 */
             font-size: 18px;
             font-weight: bold;
             color: green;
         }
         #shop-close {
             width: 100%;
-            margin-top: 8px;
+            margin-top: 4px;
+            padding: 10px;
         }

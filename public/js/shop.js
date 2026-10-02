@@ -44,6 +44,7 @@ function buyItem(item) {
     updateShop();
 }
 
+// 商品按鈕：圖示、名稱、價格分開放，畫面寬時 (style.css) 才能改成上下排；右上角是持有數量
 function renderShopItems() {
     const list = document.getElementById("shop-items");
     list.innerHTML = "";
@@ -52,7 +53,17 @@ function renderShopItems() {
         btn.className = "answer-btn shop-item-btn";
         btn.type = "button";
         btn.dataset.item = item;
-        btn.textContent = `${ITEM_INFO[item].icon} ${ITEM_INFO[item].name}\n🪙 ${price}`;
+        for (const [className, text] of [
+            ["shop-item-icon", ITEM_INFO[item].icon],
+            ["shop-item-name", ITEM_INFO[item].name],
+            ["shop-item-price", `🪙 ${price}`],
+            ["shop-item-count", ""]
+        ]) {
+            const span = document.createElement("span");
+            span.className = className;
+            span.textContent = text;
+            btn.appendChild(span);
+        }
         btn.onclick = () => buyItem(item);
         list.appendChild(btn);
     }
@@ -62,10 +73,9 @@ function renderShopItems() {
 // 更新持有金幣、道具數量，以及買不起的按鈕
 function updateShop() {
     document.getElementById("shop-gold").textContent = `🪙 ${profile.gold}`;
-    document.getElementById("shop-inventory").textContent = Object.keys(SHOP_PRICES)
-        .map(item => `${ITEM_INFO[item].icon} x${gameState.inventory[item]}`)
-        .join("  ");
     for (const btn of document.getElementById("shop-items").children) {
-        btn.disabled = profile.gold < SHOP_PRICES[btn.dataset.item];
+        const item = btn.dataset.item;
+        btn.querySelector(".shop-item-count").textContent = `x${gameState.inventory[item]}`;
+        btn.disabled = profile.gold < SHOP_PRICES[item];
     }
 }

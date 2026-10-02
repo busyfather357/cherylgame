@@ -19,7 +19,7 @@
         * `questions.js`：數學題目與錯誤選項（第 11 關起變難）。
         * `stages.js`：章節（每 10 關）、主題、每關的怪物組成與魔王。
         * `enemies.js`：怪物、寶箱、魔王的建立、移動、攻擊與繪製。
-    * `index.html`、`style.css`、`Pal_test.png`（角色精靈圖）、`screenshot.png`（社群分享圖 og:image）。
+    * `index.html`、`style.css`、`Pal_test.png`（角色精靈圖）、`shop_bg.webp`（商店背景圖）、`screenshot.png`（社群分享圖 og:image）。
 * `private/`：不部署。Playwright 測試腳本、`iframe.txt`（嵌入語法）、設計文件 `private/doc/`。
 * 根目錄：`package.json`（只有 Playwright 依賴）、`README.md`、本檔。
 
