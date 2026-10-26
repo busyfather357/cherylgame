@@ -1,0 +1,17 @@
+{
+  "name": "cherylgame-tools",
+  "private": true,
+  "description": "Local browser checks for RPG Math Challenge (development only; never deployed).",
+  "type": "commonjs",
+  "scripts": {
+    "test": "playwright test",
+    "test:spawn": "playwright test spawn.spec.js",
+    "test:csp": "playwright test csp.spec.js",
+    "test:boss": "playwright test boss.spec.js",
+    "test:touch": "playwright test touch.spec.js",
+    "og-image": "node browser/og-image.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}

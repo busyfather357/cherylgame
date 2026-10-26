@@ -1,1 +1,30 @@
+# =========================
+# Node.js / NPM 模組
+# =========================
 node_modules/
+npm-debug.log
+
+# =========================
+# Claude Code 本機設定
+# =========================
+.claude/launch.json
+.claude/settings.local.json
+
+# =========================
+# 本機測試產物 (本機伺服器紀錄、舊的 Playwright 輸出)
+# 只忽略根目錄的散落腳本；之後 tools/ 底下的 Python 工具要進 git
+# 注意：public/screenshot.png 是正式網站的社群分享圖，要進 git
+# =========================
+*.log
+test-results/
+/*.py
+
+# =========================
+# 開發工具 tools/ (Node + Playwright；之後可能加 Python)
+# 虛擬環境、套件、快取，以及工具輸出 (截圖、報告) 都不進 git
+# tools/package.json 和 tools/package-lock.json 要進 git
+# =========================
+.venv/
+__pycache__/
+tools/node_modules/
+tools/work/

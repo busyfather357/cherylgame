@@ -10,7 +10,7 @@
 cherylgame/
 ├── public/                     # 部署資料夾：只放網站需要的檔案
 │   ├── index.html              # 主入口文件，包含 HTML 結構、UI 容器與遊戲 Canvas
-│   ├── style.css               # 遊戲樣式表，包含 HUD 狀態欄、虛擬搖桿 (D-Pad)、數學挑戰彈跳視窗與商店
+│   ├── style.css               # 遊戲樣式表，包含 HUD 狀態欄、觸控搖桿與道具按鈕、數學挑戰彈跳視窗與商店
 │   ├── script.js               # 遊戲主邏輯核心 (地圖生成、物理碰撞、動畫、出題與答題、道具、選單、主迴圈)
 │   ├── js/                     # 依系統拆開的檔案 (見第 6、7 節)，在 script.js 之前載入
 │   │   ├── experience.js       # 經驗值與角色等級
@@ -20,43 +20,52 @@ cherylgame/
 │   │   ├── save.js             # 存檔 (見第 4 節)
 │   │   ├── questions.js        # 數學題目與錯誤選項 (見 7.4)
 │   │   ├── stages.js           # 章節、主題與每關數值 (見 7.1)
-│   │   └── enemies.js          # 怪物、寶箱、魔王的建立、移動、攻擊與繪製 (見 7.2、7.3)
+│   │   ├── enemies.js          # 怪物、寶箱、魔王的建立、移動、攻擊與繪製 (見 7.2、7.3)
+│   │   └── touch.js            # 觸控操作：浮動搖桿、道具按鈕、畫面方向、遊戲區域、?debug (見第 8 節)
 │   ├── Pal_test.png            # 玩家角色精靈圖 (Sprite Sheet)
 │   ├── shop_bg.webp            # 商店背景圖 (見第 3 節)
-│   └── screenshot.png          # 社群分享預覽圖 (og:image)，由 private/verify_csp.js 產生
-├── private/                    # 不部署：測試腳本與網站以外的檔案
-│   ├── test_spawn.js           # Playwright 測試：驗證寶箱 (1個) 與怪物生成數量是否正確
-│   ├── verify.js               # Playwright 測試：自動觸發 Level 5 Boss 關卡並截圖驗證
-│   ├── verify_csp.js           # Playwright 測試：驗證 CSP (內容安全策略) 與網頁載入有無 Console Error
-│   ├── boss_level.png          # 測試產出：Boss 關卡 (Level 5) 畫面截圖
+│   └── screenshot.png          # 社群分享預覽圖 (og:image)，由 tools/browser/og-image.js 產生
+├── tools/                      # 不部署：本機開發工具 (見第 9 節)
+│   ├── package.json            # 只有 @playwright/test 1.63.0 (版本寫死)
+│   ├── package-lock.json       # 進 git；npm --prefix tools ci 照這份安裝
+│   ├── .npmrc                  # save-exact=true
+│   ├── playwright.config.js    # 瀏覽器測試設定：輸出到 tools/work/playwright/
+│   ├── browser/
+│   │   ├── site.js             # 共用：routeSite() 從硬碟提供 public/ (不用伺服器、不連網)、watchErrors()
+│   │   ├── spawn.spec.js       # 第 1 關恰好 1 個寶箱，其餘是怪物
+│   │   ├── csp.spec.js         # 開啟遊戲時沒有 console error (包含 CSP 擋下的資源)
+│   │   ├── boss.spec.js        # 第 5 關是火龍魔王關，截圖到 tools/work/boss_level.png
+│   │   ├── touch.spec.js       # 觸控搖桿、道具按鈕、遊戲區域與畫面方向 (見 8.6)
+│   │   └── og-image.js         # 更新 public/screenshot.png (唯一會改 public/ 的工具)
+│   ├── node_modules/           # 不進 git
+│   └── work/                   # 不進 git：截圖、測試報告、失敗紀錄
+├── private/                    # 不部署：設計文件與網站以外的檔案
 │   ├── iframe.txt              # 提供給外部網站嵌入用的 iframe 語法 (限制見第 5 節)
 │   └── doc/
 │       ├── system_architecture.md  # 本系統架構與設計文件
 │       └── item_system.md          # 道具系統設計文件
-├── AGENTS.md                   # 給 AI Agent 的工作指引 (執行方式、程式慣例、注意事項)
+├── AGENTS.md                   # 給 AI Agent 的工作指引 (執行方式、程式慣例、開發工具、Git 規則)
+├── CLAUDE.md                   # 指向 AGENTS.md，並提醒 Claude Code 不改 git 狀態、不自行安裝
 ├── README.md                   # 專案基礎說明文件
-├── package.json                # Node.js 依賴管理 (定義 Playwright 等測試套件)
-├── package-lock.json           # 鎖定 npm 依賴版本
-├── .gitignore                  # Git 忽略清單 (排除 node_modules 等)
-├── server.log                  # 本地伺服器存取日誌紀錄
-└── test-results/               # 測試結果目錄
-    └── .last-run.json
+└── .gitignore                  # Git 忽略清單 (node_modules、tools/work/、本機設定等)
 ```
 
-* **本機測試**：測試腳本連到 `localhost`，本機伺服器必須以 `public/` 為根目錄，例如 `python -m http.server 8080 --directory public`（`verify.js` 連的是 8000 埠）。
+* **手動試玩**：本機伺服器必須以 `public/` 為根目錄，例如 `python -m http.server 8080 --directory public`。瀏覽器測試不需要伺服器（見第 9 節）。
 
 ## 2. 核心系統架構 (script.js)
 
 遊戲核心為基於 `requestAnimationFrame` 的自定義 Game Loop，不依賴大型遊戲引擎，確保極致的輕量化與靈活性。
 
-* **檔案拆分與載入順序**：所有 `.js` 都是 classic script，頂層宣告是全域、可跨檔案使用 (測試以 `page.evaluate` 直接存取)。`index.html` 依序載入 `js/experience.js` → `currency.js` → `achievements.js` → `shop.js` → `save.js` → `questions.js` → `stages.js` → `enemies.js` → `script.js`。
+* **檔案拆分與載入順序**：所有 `.js` 都是 classic script，頂層宣告是全域、可跨檔案使用 (測試以 `page.evaluate` 直接存取)。`index.html` 依序載入 `js/experience.js` → `currency.js` → `achievements.js` → `shop.js` → `save.js` → `questions.js` → `stages.js` → `enemies.js` → `touch.js` → `script.js`。
     * `script.js` 最後載入，因為它一執行就會讀檔 (`loadProgress()`) 並開始第 1 關；系統檔案在載入時只定義常數與函式，不呼叫 `script.js`。
     * 系統檔案的**頂層**也不能用到 `script.js` 的常數（例如 `enemies.js` 不能寫 `const RANGE = 4 * TILE_SIZE`，載入時 `TILE_SIZE` 還不存在），所以距離直接寫像素；函式裡面可以用。
     * `achievements.js` 必須在 `save.js` 之前：`save.js` 載入時就用 `createEmptyStats()` 建立預設的 `profile`。
     * 每個系統檔案開頭都註明它用到其他檔案的哪些變數與函式。
 
 ### 2.1 畫面與渲染 (Canvas Rendering)
-* **響應式畫布**：監聽 `resize` 與 `orientationchange` 事件，動態調整 Canvas 寬高，並支援高解析度螢幕 (DPR) 確保畫質清晰。
+* **響應式畫布**：監聽 `resize`、`orientationchange` 與 `visualViewport` 的 `resize` 事件，動態調整 Canvas 寬高，並支援高解析度螢幕 (DPR) 確保畫質清晰。
+    * 畫面大小只取一個來源：`getViewportSize()` 用 `visualViewport`（實際看得到的範圍，沒有時退回 `innerWidth/innerHeight`），畫布與 `<body>` 都設成這個大小；HUD、控制鍵、視窗都以 `<body>` 定位（`position: relative`），不會因為瀏覽器回報的高度不一致而跑到畫面外（見 8.1）。
+    * 地圖格數依整個畫面決定；繪製時等比縮放並置中到「遊戲區域」`getPlayArea()`：觸控模式扣掉 HUD 與道具按鈕（見 8.3），其他情況是整個畫面。
 * **動態去背處理**：為了完美融合地圖底色（解決人物顯示白框的問題），系統使用 `Offscreen Canvas` 在背景載入 `Pal_test.png` 時，動態讀取像素資料 (ImageData)，將接近白色的網格背景 Alpha 值設為 0，實現自動去背。
 * **Emoji 向量渲染**：將地圖物件 (🌲, 🌊, 🧱) 與敵人 (👾, 🐉, 🎁) 等 Emoji 透過 SVG 包裝並轉換為 Image 物件快取，確保在 Canvas 縮放時保持向量圖的清晰度。
 
@@ -68,7 +77,10 @@ cherylgame/
 ### 2.3 實體與 AI (Entities & AI)
 * **玩家控制**：
     * PC 端支援鍵盤 (WASD / 方向鍵)。
-    * 手機端支援螢幕虛擬搖桿 (Touch Events)，利用 CSS `touch-action: none` 防止畫面滑動。
+    * 手機與平板支援浮動虛擬搖桿 (Pointer Events，`js/touch.js`，見第 8 節)，利用 CSS `touch-action: none` 防止畫面滑動。
+    * 鍵盤與搖桿由 `getMoveVector()` 合成一個方向，長度最多 1：任何方向的速度都一樣（斜走不會比較快）。
+    * X、Y 分開檢查牆壁碰撞：斜走碰到牆時會沿著牆滑動，不會整個卡住。
+    * 切換 App 或分頁 (`blur`、`visibilitychange`)、答完題時放開所有按鍵與搖桿 (`releaseAllInput()`)，避免角色自己一直跑。
     * 自動偵測移動狀態來切換 Idle (待機) 與 Run (跑步) 的精靈圖動畫。
 * **怪物 (Monsters)**：每關隨機生成，具備基礎的隨機方向反彈移動邏輯，並會微調速度方向。第 11 關起加入有特殊行為的新怪物（🐡🐍👻🛸，見 7.2）。
 * **魔王 (Boss)**：尾數 5 的關卡固定是 🐉 火龍，10 的倍數是各章的魔王（第 10 關 👹 赤鬼，之後見 7.3）。🐉／👹 抖動 1 秒後朝玩家目前位置噴一發火球 (🔥)，約每 5 秒一次；答對 5 次才能擊敗。所有魔王頭上都有血條，血剩一半以下會生氣（紅色光圈與 💢，攻擊變快或變多）。
@@ -96,8 +108,11 @@ cherylgame/
 
 * **HUD 狀態列**：位於畫面上方，顯示當前血量 (❤️)、關卡 (`Stage N`)、角色等級與經驗值進度條 (`Lv N`，進度條上顯示累計經驗值)、金幣 (🪙) 與鑽石 (💎)，下一行是道具欄。使用文字陰影提升在各種底色下的可讀性；手機寬度不夠時會自動換行。
     * 畫面上關卡叫 Stage、角色等級叫 Lv，避免兩個「Level」混淆；程式裡的 `gameState.level` 仍是關卡。
-* **Mobile-First 控制區**：透過 CSS 媒體查詢 `@media (hover: none) and (pointer: coarse)` 自動判斷裝置。若為觸控螢幕，則顯示左下角 D-Pad 與右下角 Action 按鈕。
+    * 觸控模式隱藏道具欄（數量改顯示在道具按鈕上）；手機的 HUD 字級縮小為 18px。
+* **觸控控制區**：浮動搖桿與道具按鈕，觸控模式 (`body.touch-mode`) 才顯示，見第 8 節。原本的 D-Pad 與 Action 按鈕（對應沒有用到的空白鍵）已移除。
 * **數學題庫彈窗**：使用絕對定位覆蓋於 Canvas 之上，採防呆設計（`isAnswering` 狀態鎖），防止玩家連點造成重複計分或錯誤判定。答對時第二行顯示獲得的經驗值與金幣。同一個視窗也用 `showMenu()` 顯示 Game Over、「歡迎回來」與過關選單（見 4.5、6.4）。
+    * 題目出現後 0.3 秒內 (`ANSWER_LOCK_MS`) 按答案不算：兒童碰到怪物時手指可能還在畫面上，避免視窗一跳出來就誤按扣血。選單按鈕不受影響。
+    * 視窗設有 `max-height`，畫面矮時可以捲動，答案按鈕不會超出畫面。
     * 填空題的 □ 畫成方框 (`.blank`)：遊戲字型沒有 □，備用字型的 □ 很小。
     * 畫面寬度 480px 以下題目字級改為 38px，兩位數的題目與填空題才不會斷成兩行。
 * **商店視窗** (`#shop-overlay`)：邊框與按鈕跟題目視窗相同，由 `js/shop.js` 控制（見 6.4）。
@@ -268,6 +283,8 @@ cherylgame/
 
 ### 5.3 尚未處理：高度 288px 太小
 地圖只有 5 列（上下是牆，可走 3 列），HUD 會蓋住最上排；答題視窗超出 iframe 高度，標題與答題回饋文字被裁切。屬於版面問題，與存檔無關。加入經驗值與貨幣後，過關選單同樣會被裁切；商店視窗最高為畫面的 90%，超出時可以捲動。
+* 2026-10-25 起題目視窗也有 `max-height`，超出時可以捲動，但畫面仍然很擠。
+* 嵌入版的形狀由外層網頁決定，所以不檢查畫面方向（見 8.2）；但在手機上，288px 扣掉 HUD 與下方的道具按鈕後，地圖只剩約 150px 高。建議把嵌入高度改大。
 
 ### 5.4 各種開啟方式的存檔行為
 以 `localhost` / `127.0.0.1` 模擬同站與跨站嵌入，於 Chrome 實測：
@@ -358,7 +375,7 @@ cherylgame/
 2026-09-28 評估時整理的注意事項：
 * **管道**：網頁遊戲的獎勵廣告主要是 Google AdSense 的 H5 Games Ads（Ad Placement API，`adBreak({ type: 'reward' })`），需另外申請；或上架到 Poki、CrazyGames 等遊戲平台，改用它們的 SDK。
 * **兒童政策**：本站以兒童為對象，Google 要求標記為兒童導向，只能放非個人化廣告；美國 COPPA、歐盟 GDPR 兒童條款等要先確認。建議看廣告前加家長確認、設每日次數上限，且只在廣告確實看完（`adViewed`）時才呼叫 `addDiamonds()`。
-* **CSP**：目前 `default-src 'self'`，需要開放廣告網域的 script、frame、img、connect，並執行 `verify_csp.js`。
+* **CSP**：目前 `default-src 'self'`，需要開放廣告網域的 script、frame、img、connect，並執行 `npm --prefix tools run test:csp`。
 * **iframe 嵌入版**：現行嵌入語法沒有 `allow-popups`，廣告點擊會失效；嵌入版（`window.self !== window.top`）建議不顯示看廣告按鈕。
 * **存檔**：看廣告換到的鑽石必須立即存檔（`addDiamonds()` 已經會）。`localStorage` 可能被清除（見 4.7），可考慮不需帳號的存檔碼匯出／匯入。
 
@@ -437,3 +454,154 @@ cherylgame/
 * 手機直向 (375×812，7×16 格)：第 11 關起少一隻怪物；章魚王生氣後十字、斜向輪流；幽靈王只召喚 1 隻；所有題目（包含填空題）在題目視窗中維持一行。
 * 存檔在第 30 關時重新整理：歡迎視窗按 Continue 後才顯示「⚠️ Boss: 犀牛王」，魔王血量 6。
 * Playwright 測試 (`private/*.js`) 本次沒有執行：這台電腦沒有安裝 `node_modules`。`verify.js` 已改為呼叫 `spawnEnemies()`（不再傳入數量）。
+
+## 8. 觸控操作與畫面方向 (js/touch.js)
+
+2026-10-25 實作。起因：維護者在 iPad mini 上遊玩，畫面下半部被截斷、無法操控。維護者決定：
+* 改成一般手遊的浮動虛擬搖桿：手指按住往某個方向拉，角色就一直往那個方向跑。移除 D-pad 與 Action 按鈕。
+* 降低要支援的畫面組合：**手機只支援直向、平板只支援橫向**；電腦不限。
+* 地圖格數維持依整個畫面計算，只縮小繪製比例，難度不變。
+* 搖桿超過死區就全速；鍵盤斜走速度統一成跟直走一樣。
+* 題目出現後 0.3 秒內按答案不算（見第 3 節）。
+* 加到主畫面 (PWA) 暫不實作（見 8.7）。
+
+### 8.1 原本的問題與「下半部被截斷」
+2026-10-24 以內建瀏覽器 (Chromium) 模擬 iPad mini 的 Safari 可視區域（直向 744×1060、橫向 1133×670）實測：
+| 問題 | 原因 |
+|---|---|
+| 直向時 D-pad 與道具按鈕蓋住地圖最下面 3.4 列，寶箱可能藏在按鈕底下 | 地圖放滿整個畫面，控制鍵疊在上面 |
+| D-pad 不能滑動換方向、不能斜走 | 觸控事件只送給手指一開始按的按鈕 |
+| 角色可能停不下來 | 沒有處理 `touchcancel` |
+| Action 按鈕沒有作用 | 對應的空白鍵遊戲沒有用到 |
+| 斜走貼牆整個停住 | X、Y 一起檢查碰撞 |
+| 接上滑鼠的 iPad、觸控筆電沒有控制鍵 | 只用 `(hover: none) and (pointer: coarse)` 判斷 |
+
+**下半部被截斷在 Chromium 重現不出來**，是 Safari 或 App 內建瀏覽器特有的問題，尚未在實機確認原因。原本畫布用 `innerWidth/innerHeight`、控制鍵用 `height: 100%` 的底部定位，兩個尺寸來源只要不一致，下半部（包含控制鍵）就會落在畫面外。可能的情況：
+1. 從 LINE、Facebook 等 App 內建瀏覽器開啟：網頁延伸到 App 工具列底下。
+2. iPadOS Safari 的桌面版瀏覽模式：Apple 在 WWDC19 說明，版面比 iPad 寬的網站會忽略 `width=device-width` 並縮放，建議加上 `shrink-to-fit=no`。
+3. iOS／iPadOS 26 Safari 的浮動工具列：有開發者回報 `position: fixed` 的內容無法顯示在工具列下方、`visualViewport` 高度與 `innerHeight` 不一致。
+
+對策：畫布與 `<body>` 都用 `visualViewport` 的大小（2.1），viewport 加上 `viewport-fit=cover, shrink-to-fit=no`，控制鍵用 `env(safe-area-inset-*)` 避開 Home 指示條。**網址加上 `?debug`** 會在畫面中段顯示 `innerWidth/innerHeight`、`documentElement.clientWidth/clientHeight`、`visualViewport`、`screen`、`devicePixelRatio`、safe-area、媒體查詢結果、User Agent，並以紅框畫出畫布邊緣、黃框畫出遊戲區域（看不到下方的紅框就是畫布超出畫面）。在實機上用當初的開啟方式截圖，就能確認是哪一種情況。
+
+### 8.2 觸控模式與畫面方向
+* **觸控模式** (`body.touch-mode`)：主要輸入是觸控的裝置 (`(hover: none) and (pointer: coarse)`) 一開始就是；其他裝置（接上滑鼠的 iPad、觸控筆電）第一次用手指或觸控筆按畫布時才切換。觸控模式才顯示搖桿與道具按鈕；用滑鼠不會切換。
+* **裝置種類**：螢幕短邊 (`screen`，CSS px) 小於 600 (`PHONE_MAX_SHORT_SIDE`) 是手機 (`touch-phone`)，其餘是平板 (`touch-tablet`)。iPad mini 短邊 744，算平板。
+* **方向不對**（手機橫向、平板直向）時 `orientationBlocked` 為 true：
+    * 蓋上「Please turn your phone upright / tablet sideways」與旋轉的 📱 動畫（`#rotate-overlay`，z-index 40，蓋在題目視窗與商店之上），不能操作選單。
+    * `update()` 停止，搖桿放開。神速靴、無敵護盾照樣計時，跟答題暫停時一樣。
+    * 轉回正確方向時給 1.5 秒保護時間 (`POST_CHALLENGE_GRACE_MS`)，跟答完題一樣。
+* **嵌入版** (`window.self !== window.top`) 不檢查方向：iframe 的形狀由外層網頁決定（見 5.3）。
+* **地圖重建**：關卡還沒觸發題目時，視窗大小改變就依新大小重建地圖；停在歡迎回來、過關選單或商店時也會重建（原本暫停中不重建）。否則平板直向開啟（先顯示旋轉提示）再轉成橫向時，地圖會是直向的形狀。
+
+### 8.3 版面
+* **道具按鈕**：手機 56px 排成一列放在右下角；平板 64px 排成一行放在右側中間。右上角顯示持有數量（跟商店按鈕的數量標籤一樣），數量 0 時變灰。按下 (`pointerdown`) 就使用，可以一指拉搖桿、另一指按道具。提示卷軸照舊在題目視窗裡使用（道具按鈕被題目視窗蓋住）。
+* **遊戲區域** (`getPlayArea()`)：HUD 下方，扣掉道具按鈕那一條（手機扣下方、平板扣右側）。地圖格數不變，等比縮放置中到遊戲區域，所以控制鍵與 HUD 都不會蓋住地圖。HUD 高度改變（換行）時以 `ResizeObserver` 重新計算。
+
+| 畫面 | 格數（與原本相同） | 每格畫出來的大小 |
+|---|---|---|
+| 手機直向 375×812 | 7×16 | 約 42px |
+| iPad mini 橫向（Safari 可視區域 1133×670） | 22×13 | 約 47.5px |
+| 電腦（非觸控模式） | 依視窗 | 50px（不變） |
+
+* 手機 375px 寬時 HUD 是兩行（金幣與鑽石換到第二行），遊戲區域從第二行下方開始。
+* `body` 設定 `user-select: none`、`-webkit-touch-callout: none`：按住搖桿時不會選取文字，也不會跳出 iOS 的放大鏡或選單。
+
+### 8.4 搖桿
+| 項目 | 設計 |
+|---|---|
+| 開始位置 | 手指按在畫布上任何地方（按鈕以外，包括 HUD 上面）就在那裡出現底座 |
+| 提示 | 每次開啟遊戲後還沒用過搖桿時，在遊戲區域左下角顯示半透明的搖桿 (`.hint`)；第一次按下後就不再顯示 |
+| 尺寸 | 底座直徑 120px (`JOYSTICK_RADIUS` 60)，搖桿頭 56px |
+| 死區 | 10px (`JOYSTICK_DEAD_ZONE`) 以內不移動，超過就全速（與鍵盤相同，3；神速靴 6） |
+| 方向 | 任意角度；接近上下左右 ±20° (`JOYSTICK_SNAP_RAD`) 時吸附成正方向，比較容易走進一格寬的通道 |
+| 跟隨 | 拉超過底座半徑時，底座跟著手指移動 |
+| 多指 | 以 `pointerId` 追蹤搖桿那一指，其他手指不影響 |
+| 放開 | `pointerup`、`pointercancel`（iOS 的手勢、通知）、切換 App 或分頁都停止 |
+| 暫停 | 出題、選單、商店、方向不對時放開；恢復後手指沒放開也不會移動，要重新按下 |
+
+### 8.5 程式結構
+| 名稱 | 位置 | 作用 |
+|---|---|---|
+| `touchMode`、`enableTouchMode()` | touch.js | 觸控模式與裝置種類的 `body` class |
+| `refreshTouchLayout()` | touch.js | 更新畫面方向、遊戲區域、搖桿提示位置。`resizeCanvas()` 與 HUD 的 `ResizeObserver` 呼叫 |
+| `orientationBlocked` | touch.js | 方向不對；`update()` 檢查 |
+| `getPlayArea()` | touch.js | 地圖的繪製範圍；`draw()` 使用 |
+| `getTouchMoveVector()`、`resetTouchInput()` | touch.js | 搖桿方向（長度 1 或 null）、放開搖桿 |
+| `drawDebugInfo()`、`DEBUG_VIEWPORT` | touch.js | `?debug` 的資訊與紅、黃框；`draw()` 呼叫 |
+| `getViewportSize()` | script.js | `visualViewport` 的大小（2.1） |
+| `getMoveVector()`、`getPlayerHitbox()` | script.js | 鍵盤與搖桿合成的方向；玩家碰撞範圍（移動、碰撞、擊退共用） |
+| `releaseAllInput()` | script.js | 放開所有按鍵與搖桿 |
+
+* touch.js 在 script.js 之前載入，載入時只綁定事件；用到 script.js 的 `W`、`H`、`gameState` 等都在函式裡，第一次呼叫是 script.js 頂層的 `resizeCanvas()`（此時 `gameState` 還沒宣告，所以 `refreshTouchLayout()` 只有在「方向從不對變成正確」時才寫入 `gameState`，第一次呼叫不會發生）。
+
+### 8.6 驗證方式
+2026-10-25 以 Claude 內建瀏覽器實測。窗格隱藏時 `requestAnimationFrame` 不會執行，所以以 `PointerEvent`（`pointerType: 'touch'`）模擬觸控，並直接呼叫 `update()` 推進時間。遊戲本身沒有未攔截的例外：
+* 手機直向 375×812：觸控模式、手機版面；地圖 7×16、每格約 42px，在 HUD 與道具按鈕之間；左下角顯示搖桿提示。
+* 搖桿：往右上拉 10 格畫面移動 (21.3, −21.3)；放開、`pointercancel` 後停止；拉 6px 不移動；往左偏下約 9° 吸附成正左（Y 不變）；拉到 180px 外時底座跟到手指後方 60px。
+* 鍵盤右下斜走 10 格畫面移動 (21.3, 21.3)，與搖桿斜走相同。
+* 正上方一排牆、往右上拉：沿著牆往右移動，Y 不變。
+* 一指按住搖桿時另一指按神速靴：道具使用、搖桿仍按住；數量標籤變成 x0 並變灰。
+* 出題時搖桿放開；0.3 秒內按正確答案沒有反應，之後按才算；恢復遊戲後原本那一指繼續拉不會移動，重新按下才會。
+* 手機轉成橫向：顯示旋轉提示，按方向鍵也不移動；關卡已觸發題目，地圖不重建。轉回直向後恢復，保護時間 1.5 秒。
+* iPad mini 橫向 1133×670（模擬時沒有觸控媒體查詢，第一次觸控才切換）：平板版面；地圖 22×13、每格約 47.5px，道具按鈕在右側且不重疊。轉成直向 744×1060：顯示旋轉提示。
+* 平板直向開啟、存檔在第 3 關：歡迎回來視窗與旋轉提示；轉成橫向後歡迎回來視窗還開著，地圖重建成 22×13。
+* 電腦 1024×768：不是觸控模式，沒有控制鍵，HUD 道具欄照常，地圖畫在整個畫面。`?debug` 顯示資訊與紅、黃框。
+* 嵌入版（手機上 355×288 的 iframe）：不顯示旋轉提示，遊戲區域 355×147。
+* Playwright（1.63.0，headless Chromium）：`test_touch.js` 在 iPad mini 橫向 1133×744、iPad 第 10 代橫向 1180×820、手機直向 375×812 各 17 項，加上電腦 1280×800 的 3 項，全部通過；`test_spawn.js`、`verify_csp.js`（沒有 console error）、`verify.js`（第 5 關魔王截圖）也都通過。`verify_csp.js` 覆寫的 `public/screenshot.png` 已還原成原本的分享圖。
+    * 本專案沒有自己的 `node_modules`；這次借用 `C:\GitHub\readbible` 已安裝的 Playwright（PowerShell：`$env:NODE_PATH = 'C:\GitHub\readbible\node_modules'`），沒有另外安裝。
+    * 2026-10-26 起這些測試搬到 `tools/browser/`（`test_touch.js` 改寫成 `touch.spec.js`，見第 9 節）。
+* **尚未在 iPad mini 實機上驗證**，畫面下半部被截斷的原因也還沒確認（見 8.1）。
+
+### 8.7 尚未處理與已知限制
+* 實機驗證：iPad mini 的 Safari（以及平常開啟的方式，例如 LINE）用 `?debug` 截圖，確認 8.1 的原因已排除。
+* **加到主畫面 (PWA)**：`manifest.webmanifest`、圖示、`apple-mobile-web-app-capable`。從主畫面開啟時沒有 Safari 工具列，可以避開 8.1 的第 3 種情況，也不受 Safari 7 天清除 `localStorage` 的限制（見 4.7）。manifest 是同網域檔案，不用改 CSP。
+* **iOS 邊緣滑動返回**：在 Safari 從畫面左邊緣往右滑會回到上一頁，網頁無法阻止；直接開網址（沒有上一頁）時不受影響。
+* iPad 的分割畫面、台前調度：方向依視窗形狀判斷，視窗比較窄時會被當成直向而顯示旋轉提示。
+* 搖桿使用 Pointer Events（iOS 13 以上）；`ResizeObserver` 需要 iOS 13.4 以上，更舊的版本 HUD 換行時遊戲區域不會重新計算（旋轉或縮放視窗時仍會）。
+
+## 9. 開發工具 (tools/)
+
+2026-10-26 整理。參考 `C:\GitHub\mumuisland-web` 的架構，把開發工具集中到 `tools/`。規則摘要在 AGENTS.md 的「開發工具」與「Git」，本節是細節。維護者決定：
+* 瀏覽器測試改寫成 `@playwright/test` 的 spec 檔，跟 mumuisland-web 一樣不用架伺服器。
+* 社群分享圖 `public/screenshot.png` 改成獨立的 `og-image` 指令；瀏覽器測試只檢查、不改檔案。
+* 工具的規則寫在 AGENTS.md 與本節，不像 mumuisland-web 另外建立 `private/rules/dev-tools.md` 與工具總表（專案小，一份設計文件就夠）。
+* AGENTS.md 加上「agent 在維護者電腦上不自行安裝」與「本機 agent 不改 git 狀態」兩條規則，並新增 `CLAUDE.md`。
+
+### 9.1 搬移與刪除
+| 原本 | 現在 |
+|---|---|
+| `private/test_spawn.js` | `tools/browser/spawn.spec.js` |
+| `private/verify_csp.js` | 檢查：`tools/browser/csp.spec.js`；覆寫分享圖：`tools/browser/og-image.js` |
+| `private/verify.js`（8000 埠） | `tools/browser/boss.spec.js`；截圖改存 `tools/work/boss_level.png`（不進 git） |
+| `private/test_touch.js` | `tools/browser/touch.spec.js` |
+| 根目錄 `package.json`、`package-lock.json`（playwright 1.59.1，從來沒有安裝過） | `tools/package.json`、`tools/package-lock.json`（`@playwright/test` 1.63.0） |
+| `private/boss_level.png`、`server.log`、`test-results/` | 刪除（測試產物）。`.gitignore` 加上 `*.log`、`test-results/`、`tools/node_modules/`、`tools/work/`、`.claude/launch.json` 等 |
+
+`private/` 只剩設計文件與 `iframe.txt`。
+
+### 9.2 執行方式
+從 repo 根目錄執行，指令表在 AGENTS.md 的「本機執行與測試」：
+* `npm --prefix tools test`：全部的瀏覽器測試；`npm --prefix tools run test:touch` 等只跑一個檔案。
+* `npm --prefix tools run og-image`：覆寫 `public/screenshot.png`。只在要換分享圖時執行。
+* 報告：`tools/work/playwright/report/index.html`；失敗截圖：`tools/work/playwright/results/`。
+
+### 9.3 寫法
+* CommonJS（`require`、`module.exports`），由 Playwright 直接執行，沒有 TypeScript 或打包。註解用繁體中文，跟遊戲程式一致。
+* **`routeSite(page)`**（`tools/browser/site.js`）：開頁面前呼叫。網址用保留給測試的 `http://cherylgame.test`，本站的請求比照 Cloudflare Pages 從硬碟讀 `public/`（大小寫要相同、`/` 對到 `index.html`），找不到回 404；其他網站（Google Tag Manager 等）一律回空內容。不用架伺服器、不佔連接埠，也不連網；GTM 的 script 是空的，所以不會送出 GA 資料。
+* **`watchErrors(page)`**：收集未攔截的例外與 console error（包含 CSP 擋下的資源），每個測試最後檢查是空的。
+* `touch.spec.js` 每一項行為是一個測試，每個測試開新的頁面；裝置以 `test.use({ viewport, screen, isMobile, hasTouch })` 設定。
+* `og-image.js` 以 1280×720 開啟第 1 關剛開始的畫面，跟原本 `verify_csp.js` 產生的分享圖大小相同。
+* **Python**：目前沒有 Python 工具。之後新增時照 mumuisland-web 的做法：`tools/__init__.py`、`tools/config.py`（共用路徑）、一個工具一個模組（`python -m tools.<module>`）、`tools/tests/` 的 `unittest`。`.gitignore` 已先忽略 `.venv/`、`__pycache__/` 與根目錄的 `/*.py`。
+
+### 9.4 安裝
+* 由維護者手動執行（agent 不自行安裝，見 AGENTS.md）。2026-10-26 維護者已執行 `npm --prefix tools install`，產生 `tools/package-lock.json`；之後在新環境用 `npm --prefix tools ci` 照 lock 檔安裝。
+* Playwright 1.63.0 用的 chromium-1243 已經在 `%LOCALAPPDATA%\ms-playwright`（所有專案共用），不用再下載瀏覽器。
+
+### 9.5 驗證方式
+2026-10-26，`tools/node_modules/` 的 `@playwright/test` 1.63.0（headless Chromium，8 個 worker 平行執行）：
+* `npm --prefix tools test` 共 25 項：spawn、csp、boss 各 1 項，touch 22 項（3 種觸控裝置各 7 項，加上電腦 1 項）。
+* 第一次執行 24 項通過、1 項失敗：iPad 第 10 代的「斜走碰到牆會沿著牆滑動」原本先拉 200ms 讓角色走到牆邊，平行執行時畫面更新次數不夠，角色還沒碰到牆。改成用 `isWallCollision()` 直接把角色貼到牆下，不靠等待時間。這是測試寫法的問題，遊戲本身沒有改。
+* 修正後以 `--repeat-each=3` 執行 75 項全部通過（38.8 秒）；「沿著牆滑動」單獨重複 5 次（15 項）也全部通過。
+* 測試前後 `public/` 所有檔案的 hash 相同，瀏覽器測試沒有改到網站檔案。
+* `og-image` 產生 1280×720 的第 1 關畫面；驗證完已把 `public/screenshot.png` 還原成原本的分享圖。
+* `boss.spec.js` 的截圖在 `tools/work/boss_level.png`。git 確認 `tools/node_modules/`、`tools/work/`、`.claude/launch.json` 被忽略，`tools/package.json`、`tools/package-lock.json`、`.npmrc`、設定檔與 spec 檔會進 git。

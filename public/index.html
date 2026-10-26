@@ -2,7 +2,8 @@
 <html lang="en"> 
 <head>     
     <meta charset="UTF-8">     
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">     
+    <!-- viewport-fit=cover：控制鍵以 env(safe-area-inset-*) 避開 Home 指示條；shrink-to-fit=no：iPadOS 不要自動縮放版面 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, shrink-to-fit=no">
     
     <!-- 更新 CSP 規則以允許 Google Analytics 與 Tag Manager 執行 -->
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://www.google-analytics.com https://www.googletagmanager.com; connect-src 'self' https://www.google-analytics.com;">     
@@ -78,23 +79,23 @@
             <span id="inv-shield" class="inv-item">🛡️ x0</span>
         </div>
     </div>     
-    <div id="mobile-controls">         
-        <div class="dpad">             
-            <div class="dpad-btn" id="btn-up">⬆️</div>
-            <div class="dpad-btn" id="btn-down">⬇️</div>
-            <div class="dpad-btn" id="btn-left">⬅️</div>
-            <div class="dpad-btn" id="btn-right">➡️</div>     
-        </div>         
-        <div class="action-btn-container">             
-            <div class="action-btn" id="btn-action">Action</div>         
-        </div>     
-        <div class="item-btn-container">
-            <div class="item-btn" id="btn-item-1">🧪</div>
-            <div class="item-btn" id="btn-item-2">🥾</div>
-            <div class="item-btn" id="btn-item-3">📜</div>
-            <div class="item-btn" id="btn-item-4">🛡️</div>
+    <!-- 觸控操作 (js/touch.js)：浮動搖桿與道具按鈕，觸控模式 (body.touch-mode) 才顯示 -->
+    <div id="mobile-controls">
+        <div id="joystick"><div id="joystick-knob"></div></div>
+        <!-- 右上角是持有數量 (updateHUD) -->
+        <div id="touch-items">
+            <button class="item-btn" type="button" data-item="potion">🧪<span class="item-count">x0</span></button>
+            <button class="item-btn" type="button" data-item="boots">🥾<span class="item-count">x0</span></button>
+            <button class="item-btn" type="button" data-item="scroll">📜<span class="item-count">x0</span></button>
+            <button class="item-btn" type="button" data-item="shield">🛡️<span class="item-count">x0</span></button>
         </div>
-    </div>     
+    </div>
+    <!-- 畫面方向不對時的提示 (js/touch.js)：手機只支援直向、平板只支援橫向 -->
+    <div id="rotate-overlay">
+        <div id="rotate-icon">📱</div>
+        <div class="rotate-phone">Please turn your phone upright</div>
+        <div class="rotate-tablet">Please turn your tablet sideways</div>
+    </div>
     <div id="math-modal-overlay">         
         <div id="math-modal">             
             <h2 id="math-title">Math Challenge!</h2>             
@@ -131,6 +132,7 @@
     <script src="js/questions.js"></script>
     <script src="js/stages.js"></script>
     <script src="js/enemies.js"></script>
+    <script src="js/touch.js"></script>
     <script src="script.js"></script>
 </body> 
 </html>

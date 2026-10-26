@@ -10,6 +10,7 @@ const MAX_HP = 3;
 const FRAME_MS = 1000 / 60;          // 移動數值以 60fps 為基準
 const MAX_DT = 3;                    // 單格畫面最多補 3 格 (避免切換分頁回來瞬移)
 const POST_CHALLENGE_GRACE_MS = 1500; // 答題結束後的短暫保護時間
+const ANSWER_LOCK_MS = 300;          // 題目出現後這段時間內按答案不算 (碰到怪物時手指可能還在畫面上，避免誤按扣血)
 const SPAWN_SAFE_RADIUS = 2;         // 敵人不可生成在玩家周圍 N 格內
 const ITEM_TYPES = ['potion', 'boots', 'scroll', 'shield'];
 const ITEM_INFO = {
@@ -24,28 +25,42 @@ let W = window.innerWidth;
 let H = window.innerHeight;
 let DPR = window.devicePixelRatio || 1;
 
+// 畫面大小只取一個來源：實際看得到的範圍 (visualViewport)。
+// iOS 的 App 內建瀏覽器、工具列等情況下，innerHeight 與 height: 100% 可能比看得到的高，下半部就會跑到畫面外
+function getViewportSize() {
+    const vv = window.visualViewport;
+    if (vv) return { width: Math.floor(vv.width * vv.scale), height: Math.floor(vv.height * vv.scale) };
+    return { width: window.innerWidth, height: window.innerHeight };
+}
+
+// 畫布與 body 設成同樣大小，HUD、控制鍵、視窗都以 body 定位 (style.css)
 function resizeCanvas() {
-    W = window.innerWidth;
-    H = window.innerHeight;
+    const size = getViewportSize();
+    W = size.width;
+    H = size.height;
     DPR = window.devicePixelRatio || 1;
+    document.body.style.width = W + "px";
+    document.body.style.height = H + "px";
     canvas.style.width = W + "px";
     canvas.style.height = H + "px";
     canvas.width = Math.floor(W * DPR);
     canvas.height = Math.floor(H * DPR);
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     ctx.imageSmoothingEnabled = false;
+    refreshTouchLayout(); // 畫面方向與遊戲區域 (js/touch.js)
 }
 
 let resizeTimer = null;
 function handleResize() {
     resizeCanvas();
-    // 關卡還沒發生任何碰撞時，依新視窗大小重建地圖；否則維持地圖、只縮放畫面
+    // 關卡還沒發生任何碰撞時，依新視窗大小重建地圖；否則維持地圖、只縮放畫面。
+    // 停在歡迎回來、過關選單或商店時也要重建：平板直向開啟 (方向不對) 再轉成橫向時，地圖才不會是直向的形狀
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
         const cols = Math.max(5, Math.floor(W / TILE_SIZE));
         const rows = Math.max(5, Math.floor(H / TILE_SIZE));
         const sizeChanged = cols !== gameState.cols || rows !== gameState.rows;
-        if (sizeChanged && !gameState.levelTouched && !gameState.paused) {
+        if (sizeChanged && !gameState.levelTouched) {
             startLevel();
         }
     }, 250);
@@ -53,6 +68,7 @@ function handleResize() {
 
 window.addEventListener('resize', handleResize);
 window.addEventListener('orientationchange', handleResize);
+if (window.visualViewport) window.visualViewport.addEventListener('resize', handleResize);
 resizeCanvas(); // Initial call
 
 
@@ -194,6 +210,13 @@ function generateMap(level) {
     gameState.y = centerY * TILE_SIZE;
 }
 
+// 玩家的碰撞範圍：縮小並置中，碰撞起來比較自然
+function getPlayerHitbox(x, y) {
+    const drawW = gameConfig.drawWidth;
+    const drawH = gameConfig.drawHeight;
+    return { x: x + drawW / 4, y: y + drawH / 4, width: drawW / 2, height: drawH / 2 };
+}
+
 function getPlayerTile() {
     return {
         c: Math.floor((gameState.x + gameConfig.drawWidth / 2) / TILE_SIZE),
@@ -226,32 +249,32 @@ window.addEventListener("keydown", (e) => {
     if (e.code === 'Digit4') useItem('shield');
 });
 window.addEventListener("keyup", (e) => { keys[e.code] = false; });
+// 搖桿與道具按鈕在 js/touch.js
 
-// 綁定虛擬按鍵
-const bindTouch = (id, keyCode) => {
-    const btn = document.getElementById(id);
-    if (!btn) return;
-    btn.addEventListener("touchstart", (e) => { e.preventDefault(); keys[keyCode] = true; });
-    btn.addEventListener("touchend", (e) => { e.preventDefault(); keys[keyCode] = false; });
-};
-bindTouch("btn-up", "ArrowUp");
-bindTouch("btn-down", "ArrowDown");
-bindTouch("btn-left", "ArrowLeft");
-bindTouch("btn-right", "ArrowRight");
-bindTouch("btn-action", "Space"); // Optional action button
+// 放開所有按鍵與搖桿 (答完題、切換 App 或分頁時)，避免角色自己一直跑
+function releaseAllInput() {
+    for (const key in keys) keys[key] = false;
+    resetTouchInput();
+}
+window.addEventListener("blur", releaseAllInput);
+document.addEventListener("visibilitychange", releaseAllInput);
 
-const bindItemTouch = (id, itemName) => {
-    const btn = document.getElementById(id);
-    if (!btn) return;
-    btn.addEventListener("touchstart", (e) => {
-        e.preventDefault();
-        useItem(itemName);
-    });
-};
-bindItemTouch("btn-item-1", "potion");
-bindItemTouch("btn-item-2", "boots");
-bindItemTouch("btn-item-3", "scroll");
-bindItemTouch("btn-item-4", "shield");
+// 鍵盤與搖桿合成的移動方向，長度最多 1：斜走不會比直走快
+function getMoveVector() {
+    let x = 0;
+    let y = 0;
+    if (keys["ArrowRight"] || keys["KeyD"]) x += 1;
+    if (keys["ArrowLeft"] || keys["KeyA"]) x -= 1;
+    if (keys["ArrowUp"] || keys["KeyW"]) y -= 1;
+    if (keys["ArrowDown"] || keys["KeyS"]) y += 1;
+    const touch = getTouchMoveVector();
+    if (touch) {
+        x += touch.x;
+        y += touch.y;
+    }
+    const length = Math.hypot(x, y);
+    return length > 1 ? { x: x / length, y: y / length } : { x, y };
+}
 
 // 題目視窗內的提示卷軸按鈕 (手機的道具列會被視窗遮住，所以放在視窗裡)
 document.getElementById("hint-btn").addEventListener("click", () => useItem('scroll'));
@@ -469,7 +492,9 @@ function update(timestamp) {
         : 1;
     gameState.lastUpdateTime = timestamp;
 
-    if (gameState.paused) {
+    // 暫停 (答題、選單、商店) 或畫面方向不對 (js/touch.js) 時停止；搖桿也放開，恢復後要重新按下才會移動
+    if (gameState.paused || orientationBlocked) {
+        resetTouchInput();
         return;
     }
 
@@ -486,48 +511,24 @@ function update(timestamp) {
     const worldW = gameState.worldW;
     const worldH = gameState.worldH;
 
-    let isMoving = false;
-    let nextX = gameState.x;
-    let nextY = gameState.y;
+    // 移動：鍵盤與搖桿合成的方向；X、Y 分開檢查牆壁，斜走碰到牆時會沿著牆滑動
+    const move = getMoveVector();
+    const isMoving = move.x !== 0 || move.y !== 0;
     const step = gameState.speed * dt;
+    if (move.x > 0.1) gameState.facingLeft = false;
+    if (move.x < -0.1) gameState.facingLeft = true;
 
-    // 移動邏輯
-    if (keys["ArrowRight"] || keys["KeyD"]) {
-        nextX += step;
-        isMoving = true;
-        gameState.facingLeft = false;
+    if (move.x !== 0) {
+        const nextX = gameState.x + move.x * step;
+        if (!isWallCollision(getPlayerHitbox(nextX, gameState.y))) gameState.x = nextX;
     }
-    if (keys["ArrowLeft"] || keys["KeyA"]) {
-        nextX -= step;
-        isMoving = true;
-        gameState.facingLeft = true;
-    }
-    if (keys["ArrowUp"] || keys["KeyW"]) {
-        nextY -= step;
-        isMoving = true;
-    }
-    if (keys["ArrowDown"] || keys["KeyS"]) {
-        nextY += step;
-        isMoving = true;
+    if (move.y !== 0) {
+        const nextY = gameState.y + move.y * step;
+        if (!isWallCollision(getPlayerHitbox(gameState.x, nextY))) gameState.y = nextY;
     }
 
     const drawW = gameConfig.drawWidth;
     const drawH = gameConfig.drawHeight;
-
-    // 碰撞偵測 (玩家與牆壁)
-    if (isMoving) {
-        const testRect = {
-            x: nextX + (drawW / 4),
-            y: nextY + (drawH / 4),
-            width: drawW / 2,
-            height: drawH / 2
-        };
-
-        if (!isWallCollision(testRect)) {
-            gameState.x = nextX;
-            gameState.y = nextY;
-        }
-    }
 
     // 邊界檢查 (維持作為備用保護)
     if (gameState.x < -drawW/2) gameState.x = -drawW/2;
@@ -556,12 +557,7 @@ function update(timestamp) {
     }
 
     // 碰撞偵測
-    const playerRect = {
-        x: gameState.x + (drawW / 4), // 縮小並置中碰撞範圍使其更自然
-        y: gameState.y + (drawH / 4),
-        width: drawW / 2,
-        height: drawH / 2
-    };
+    const playerRect = getPlayerHitbox(gameState.x, gameState.y);
 
     // 敵人的移動與攻擊在 js/enemies.js
     const frame = {
@@ -667,16 +663,20 @@ function draw() {
     ctx.clearRect(0, 0, W, H);
     if (!gameState.worldW || !gameState.worldH) return;
 
-    // 將固定大小的地圖等比縮放並置中到目前視窗 (旋轉手機或縮放視窗時不會裁切)
-    const viewScale = Math.min(W / gameState.worldW, H / gameState.worldH);
-    const offsetX = (W - gameState.worldW * viewScale) / 2;
-    const offsetY = (H - gameState.worldH * viewScale) / 2;
+    // 將固定大小的地圖等比縮放並置中到遊戲區域 (縮放視窗時不會裁切)。
+    // 觸控模式的遊戲區域扣掉 HUD 與道具按鈕 (js/touch.js)，其他情況是整個畫面
+    const area = getPlayArea();
+    const viewScale = Math.min(area.width / gameState.worldW, area.height / gameState.worldH);
+    const offsetX = area.x + (area.width - gameState.worldW * viewScale) / 2;
+    const offsetY = area.y + (area.height - gameState.worldH * viewScale) / 2;
 
     ctx.save();
     ctx.translate(offsetX, offsetY);
     ctx.scale(viewScale, viewScale);
     drawWorld();
     ctx.restore();
+
+    if (DEBUG_VIEWPORT) drawDebugInfo(area);
 }
 
 function drawWorld() {
@@ -839,6 +839,7 @@ function triggerMathChallenge() {
 
     // Show modal
     modalOverlay.style.display = "flex";
+    answersReadyAt = performance.now() + ANSWER_LOCK_MS;
 }
 
 // Cache DOM elements for HUD to avoid querying and recreating every time
@@ -881,10 +882,16 @@ function updateHUD() {
     updateXpHUD();
     updateWalletHUD();
 
-    // Update Inventory
+    // Update Inventory (HUD 的道具欄，以及觸控模式的道具按鈕右上角的數量)
     for (const item of ITEM_TYPES) {
+        const count = gameState.inventory[item];
         const invEl = document.getElementById(`inv-${item}`);
-        if (invEl) invEl.textContent = `${ITEM_INFO[item].icon} x${gameState.inventory[item]}`;
+        if (invEl) invEl.textContent = `${ITEM_INFO[item].icon} x${count}`;
+        const itemBtn = document.querySelector(`.item-btn[data-item="${item}"]`);
+        if (itemBtn) {
+            itemBtn.querySelector(".item-count").textContent = `x${count}`;
+            itemBtn.classList.toggle("empty", count <= 0);
+        }
     }
 }
 
@@ -899,13 +906,12 @@ function showToast(text) {
 }
 
 let isAnswering = false;
+let answersReadyAt = 0; // 這個時間之前按答案不算 (ANSWER_LOCK_MS)
 
 // 關閉題目視窗並恢復遊戲，同時給予短暫保護時間避免立刻再次碰撞
 function resumeGame() {
     document.getElementById("math-modal-overlay").style.display = "none";
-    for (let key in keys) {
-        keys[key] = false;
-    }
+    releaseAllInput();
     gameState.paused = false;
     gameState.challengeSource = null;
     gameState.graceUntil = performance.now() + POST_CHALLENGE_GRACE_MS;
@@ -917,8 +923,6 @@ function resumeGame() {
 function applyKnockback(source) {
     const drawW = gameConfig.drawWidth;
     const drawH = gameConfig.drawHeight;
-    const hitbox = (x, y) => ({ x: x + drawW / 4, y: y + drawH / 4, width: drawW / 2, height: drawH / 2 });
-
     let dirX = 0;
     let dirY = 1; // 沒有來源資訊時維持往下彈
     if (source) {
@@ -936,12 +940,12 @@ function applyKnockback(source) {
     for (let moved = 0; moved < knockbackDist; moved += step) {
         const nextX = gameState.x + dirX * step;
         const nextY = gameState.y + dirY * step;
-        if (!isWallCollision(hitbox(nextX, nextY))) {
+        if (!isWallCollision(getPlayerHitbox(nextX, nextY))) {
             gameState.x = nextX;
             gameState.y = nextY;
-        } else if (dirX !== 0 && !isWallCollision(hitbox(nextX, gameState.y))) {
+        } else if (dirX !== 0 && !isWallCollision(getPlayerHitbox(nextX, gameState.y))) {
             gameState.x = nextX;
-        } else if (dirY !== 0 && !isWallCollision(hitbox(gameState.x, nextY))) {
+        } else if (dirY !== 0 && !isWallCollision(getPlayerHitbox(gameState.x, nextY))) {
             gameState.y = nextY;
         } else {
             break; // 撞到牆壁，立刻停止擊退
@@ -1024,6 +1028,7 @@ function resetGame() {
 
 function checkAnswer(selected, correct, op) {
     if (isAnswering) return; // Prevent spam clicking
+    if (performance.now() < answersReadyAt) return; // 題目剛出現，可能是誤按
     isAnswering = true;
     updateHintButton();
 
