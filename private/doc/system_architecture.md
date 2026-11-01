@@ -21,8 +21,10 @@ cherylgame/
 │   │   ├── questions.js        # 數學題目與錯誤選項 (見 7.4)
 │   │   ├── stages.js           # 章節、主題與每關數值 (見 7.1)
 │   │   ├── enemies.js          # 怪物、寶箱、魔王的建立、移動、攻擊與繪製 (見 7.2、7.3)
-│   │   └── touch.js            # 觸控操作：浮動搖桿、道具按鈕、畫面方向、遊戲區域、?debug (見第 8 節)
-│   ├── Pal_test.png            # 玩家角色精靈圖 (Sprite Sheet)
+│   │   ├── touch.js            # 觸控操作：浮動搖桿、道具按鈕、畫面方向、遊戲區域、?debug (見第 8 節)
+│   │   └── characters.js       # 角色的精靈圖與動畫設定，由 tools/sprites.py 產生 (見 2.1)
+│   ├── characters/             # 角色精靈圖 (Sprite Sheet)，由 tools/sprites.py 產生
+│   │   └── knight.png          # 騎士
 │   ├── shop_bg.webp            # 商店背景圖 (見第 3 節)
 │   └── screenshot.png          # 社群分享預覽圖 (og:image)，由 tools/browser/og-image.js 產生
 ├── tools/                      # 不部署：本機開發工具 (見第 9 節)
@@ -36,14 +38,21 @@ cherylgame/
 │   │   ├── csp.spec.js         # 開啟遊戲時沒有 console error (包含 CSP 擋下的資源)
 │   │   ├── boss.spec.js        # 第 5 關是火龍魔王關，截圖到 tools/work/boss_level.png
 │   │   ├── touch.spec.js       # 觸控搖桿、道具按鈕、遊戲區域與畫面方向 (見 8.6)
-│   │   └── og-image.js         # 更新 public/screenshot.png (唯一會改 public/ 的工具)
+│   │   ├── character.spec.js   # 角色圖載入成功，玩家碰撞範圍不受角色圖影響
+│   │   └── og-image.js         # 更新 public/screenshot.png
+│   ├── __init__.py、config.py  # Python 工具的套件與共用路徑
+│   ├── sprites.py              # 角色精靈圖建置：原圖 → public/characters/ 與 js/characters.js (見 private/doc/character_pipeline.md)
+│   ├── characters/             # 每個角色的設定檔 <id>.json (進 git)
+│   ├── tests/                  # Python 工具的 unittest
 │   ├── node_modules/           # 不進 git
 │   └── work/                   # 不進 git：截圖、測試報告、失敗紀錄
 ├── private/                    # 不部署：設計文件與網站以外的檔案
 │   ├── iframe.txt              # 提供給外部網站嵌入用的 iframe 語法 (限制見第 5 節)
 │   └── doc/
 │       ├── system_architecture.md  # 本系統架構與設計文件
-│       └── item_system.md          # 道具系統設計文件
+│       ├── item_system.md          # 道具系統設計文件
+│       └── character_pipeline.md   # 角色圖像生成流程評估 (Gemini 概念圖 → 精靈圖)
+├── reference/                  # 不進 git、不部署：本機參考素材 (Gemini 原圖等)；角色原圖在 reference/characters/<id>/
 ├── AGENTS.md                   # 給 AI Agent 的工作指引 (執行方式、程式慣例、開發工具、Git 規則)
 ├── CLAUDE.md                   # 指向 AGENTS.md，並提醒 Claude Code 不改 git 狀態、不自行安裝
 ├── README.md                   # 專案基礎說明文件
@@ -56,7 +65,7 @@ cherylgame/
 
 遊戲核心為基於 `requestAnimationFrame` 的自定義 Game Loop，不依賴大型遊戲引擎，確保極致的輕量化與靈活性。
 
-* **檔案拆分與載入順序**：所有 `.js` 都是 classic script，頂層宣告是全域、可跨檔案使用 (測試以 `page.evaluate` 直接存取)。`index.html` 依序載入 `js/experience.js` → `currency.js` → `achievements.js` → `shop.js` → `save.js` → `questions.js` → `stages.js` → `enemies.js` → `touch.js` → `script.js`。
+* **檔案拆分與載入順序**：所有 `.js` 都是 classic script，頂層宣告是全域、可跨檔案使用 (測試以 `page.evaluate` 直接存取)。`index.html` 依序載入 `js/experience.js` → `currency.js` → `achievements.js` → `shop.js` → `save.js` → `questions.js` → `stages.js` → `enemies.js` → `touch.js` → `characters.js` → `script.js`。
     * `script.js` 最後載入，因為它一執行就會讀檔 (`loadProgress()`) 並開始第 1 關；系統檔案在載入時只定義常數與函式，不呼叫 `script.js`。
     * 系統檔案的**頂層**也不能用到 `script.js` 的常數（例如 `enemies.js` 不能寫 `const RANGE = 4 * TILE_SIZE`，載入時 `TILE_SIZE` 還不存在），所以距離直接寫像素；函式裡面可以用。
     * `achievements.js` 必須在 `save.js` 之前：`save.js` 載入時就用 `createEmptyStats()` 建立預設的 `profile`。
@@ -66,7 +75,12 @@ cherylgame/
 * **響應式畫布**：監聽 `resize`、`orientationchange` 與 `visualViewport` 的 `resize` 事件，動態調整 Canvas 寬高，並支援高解析度螢幕 (DPR) 確保畫質清晰。
     * 畫面大小只取一個來源：`getViewportSize()` 用 `visualViewport`（實際看得到的範圍，沒有時退回 `innerWidth/innerHeight`），畫布與 `<body>` 都設成這個大小；HUD、控制鍵、視窗都以 `<body>` 定位（`position: relative`），不會因為瀏覽器回報的高度不一致而跑到畫面外（見 8.1）。
     * 地圖格數依整個畫面決定；繪製時等比縮放並置中到「遊戲區域」`getPlayArea()`：觸控模式扣掉 HUD 與道具按鈕（見 8.3），其他情況是整個畫面。
-* **動態去背處理**：為了完美融合地圖底色（解決人物顯示白框的問題），系統使用 `Offscreen Canvas` 在背景載入 `Pal_test.png` 時，動態讀取像素資料 (ImageData)，將接近白色的網格背景 Alpha 值設為 0，實現自動去背。
+* **角色精靈圖**（2026-11-01 改版，設計與評估見 [`character_pipeline.md`](character_pipeline.md)）：
+    * 去背、切格、對齊、縮放都由 `tools/sprites.py` 在建置時完成，產出 `public/characters/<id>.png` 與 `js/characters.js`（全域 `CHARACTERS`）。遊戲載入後直接繪製，不在執行期處理像素。原本在 `script.js` 用 `getImageData` 動態去背的做法已移除（留下淺色白邊、角色在格子裡晃動，也曾因 tainted canvas 失效，見 5.2）。
+    * 每格 128×128，每排一個動畫 (`idle`、`run`)，以 `drawScale` 0.5 畫成 64px；角色腳底中心 (`anchor`) 對齊玩家方塊的底部中心。
+    * 玩家方塊固定 `PLAYER_WIDTH`×`PLAYER_HEIGHT`（50×52，跟改版前的繪製大小相同），碰撞範圍 `getPlayerHitbox()`、出生位置、擊退都以它為準，換角色不影響遊戲平衡。
+    * 角色是插畫風，畫角色時開啟 `imageSmoothingEnabled`（品質 `high`），其他東西維持關閉。
+    * 目前只有騎士（`playerCharacter = CHARACTERS.knight`），原圖是改版前的 `Pal_test.png`（2 MB，已移到本機的 `reference/`，網站上的角色圖剩 13 KB）。
 * **Emoji 向量渲染**：將地圖物件 (🌲, 🌊, 🧱) 與敵人 (👾, 🐉, 🎁) 等 Emoji 透過 SVG 包裝並轉換為 Image 物件快取，確保在 Canvas 縮放時保持向量圖的清晰度。
 
 ### 2.2 關卡與地圖生成 (Map Generation)
@@ -278,7 +292,7 @@ cherylgame/
 ### 5.2 舊語法 `sandbox="allow-scripts"` 的問題（2026-09-25 以 Chrome 實測）
 舊語法沒有搭配 `allow-same-origin`，瀏覽器會把 iframe 裡的遊戲當成「沒有來源」的頁面（`self.origin === "null"`），即使網址就是遊戲自己的網域。這跟放在哪個網域無關，只要用舊語法嵌入就會發生：
 1. **（2026-09-28 已修正）無法存檔**：讀取 `window.localStorage` 直接丟出 `SecurityError`（訊息：*The document is sandboxed and lacks the 'allow-same-origin' flag*）。存檔程式已依 4.3 全部包 `try/catch`，所以仍使用舊語法的網站也能正常啟動遊戲，只是關掉頁面後進度不會保留。
-2. **（2026-09-28 已修正）角色去背失效，出現白框**：對「沒有來源」的頁面來說，`Pal_test.png` 屬於跨來源圖片；畫到 canvas 後 canvas 被標記為 tainted，`getImageData` 丟出 `SecurityError`，程式進入 fallback 直接使用未去背的原圖。
+2. **（2026-09-28 已修正）角色去背失效，出現白框**：對「沒有來源」的頁面來說，`Pal_test.png` 屬於跨來源圖片；畫到 canvas 後 canvas 被標記為 tainted，`getImageData` 丟出 `SecurityError`，程式進入 fallback 直接使用未去背的原圖。2026-11-01 起角色圖在建置時就已去背（見 2.1），遊戲不再呼叫 `getImageData`，這個問題不會再發生。
 3. **（2026-09-28 已修正）src 指向 github.io 而非專屬網域**：嵌入版與直連版的存檔、Google Analytics 數據分散在兩個網域。已改為 `https://mathrpg.mumuisland.com/`。
 
 ### 5.3 尚未處理：高度 288px 太小
@@ -584,6 +598,8 @@ cherylgame/
 * `npm --prefix tools test`：全部的瀏覽器測試；`npm --prefix tools run test:touch` 等只跑一個檔案。
 * `npm --prefix tools run og-image`：覆寫 `public/screenshot.png`。只在要換分享圖時執行。
 * 報告：`tools/work/playwright/report/index.html`；失敗截圖：`tools/work/playwright/results/`。
+* `python -m tools.sprites <id>`／`--all`／`--check`／`template`：角色精靈圖（見 9.6）。
+* `python -m unittest discover -s tools/tests -t .`：Python 工具的測試。
 
 ### 9.3 寫法
 * CommonJS（`require`、`module.exports`），由 Playwright 直接執行，沒有 TypeScript 或打包。註解用繁體中文，跟遊戲程式一致。
@@ -591,7 +607,8 @@ cherylgame/
 * **`watchErrors(page)`**：收集未攔截的例外與 console error（包含 CSP 擋下的資源），每個測試最後檢查是空的。
 * `touch.spec.js` 每一項行為是一個測試，每個測試開新的頁面；裝置以 `test.use({ viewport, screen, isMobile, hasTouch })` 設定。
 * `og-image.js` 以 1280×720 開啟第 1 關剛開始的畫面，跟原本 `verify_csp.js` 產生的分享圖大小相同。
-* **Python**：目前沒有 Python 工具。之後新增時照 mumuisland-web 的做法：`tools/__init__.py`、`tools/config.py`（共用路徑）、一個工具一個模組（`python -m tools.<module>`）、`tools/tests/` 的 `unittest`。`.gitignore` 已先忽略 `.venv/`、`__pycache__/` 與根目錄的 `/*.py`。
+* **Python**：照 mumuisland-web 的做法：`tools/__init__.py`、`tools/config.py`（共用路徑）、一個工具一個模組（`python -m tools.<module>`）、`tools/tests/test_<module>.py` 的 `unittest`（暫存檔寫在 `tools/work/`）。註解用繁體中文。`.gitignore` 已忽略 `.venv/`、`__pycache__/` 與根目錄的 `/*.py`。
+    * 只用維護者電腦系統 Python 已安裝的 Pillow 12.3.0（2026-11-01 維護者決定），不建 venv、不另外安裝。
 
 ### 9.4 安裝
 * 由維護者手動執行（agent 不自行安裝，見 AGENTS.md）。2026-10-26 維護者已執行 `npm --prefix tools install`，產生 `tools/package-lock.json`；之後在新環境用 `npm --prefix tools ci` 照 lock 檔安裝。
@@ -605,3 +622,14 @@ cherylgame/
 * 測試前後 `public/` 所有檔案的 hash 相同，瀏覽器測試沒有改到網站檔案。
 * `og-image` 產生 1280×720 的第 1 關畫面；驗證完已把 `public/screenshot.png` 還原成原本的分享圖。
 * `boss.spec.js` 的截圖在 `tools/work/boss_level.png`。git 確認 `tools/node_modules/`、`tools/work/`、`.claude/launch.json` 被忽略，`tools/package.json`、`tools/package-lock.json`、`.npmrc`、設定檔與 spec 檔會進 git。
+
+### 9.6 角色精靈圖 (`tools/sprites.py`)
+2026-11-01 加入，設計、方案比較與 Gemini 生圖規範見 [`character_pipeline.md`](character_pipeline.md)。
+* 輸入：設定檔 `tools/characters/<id>.json`（進 git）＋原圖 `reference/characters/<id>/`（只在本機，不進 git）。設定檔欄位說明在 `tools/sprites.py` 開頭。
+* 輸出：`public/characters/<id>.png`、`public/js/characters.js`（所有角色），以及 `tools/work/sprites/<id>/` 的預覽圖 `preview.png`（兩種地板、碰撞範圍、腳底與頭頂掛點）、各動畫的 GIF、報告 `report.txt`（切出的每一格在原圖的位置、晃動量、檔案大小）。
+* 先處理完所有指定的角色，全部成功才寫檔。`--check` 重新處理一次並逐像素比較，原圖不在本機的角色略過（雲端 agent 的環境沒有原圖）。
+* 驗證（2026-11-01）：
+    * 騎士：從 `Pal_test.png` 自動切出 20 格，取前 8 格；頭部水平晃動 idle 0px、run 1px（畫面上）；精靈圖 512×256、64 色、12.8 KB。處理約 1.6 秒，`--check` 一致。
+    * `python -m unittest discover -s tools/tests -t .` 16 項通過：以程式合成的綠幕原圖測試去背（角色內部的白色保留、沒有綠邊、雜點去掉）、切格順序、對齊、手動偏移、設定檔檢查與 `characters.js` 的讀寫。第一次執行發現頭與身體交接的凹角有綠色溢色殘留在離邊緣第 3 圈，despill 的範圍從 2 圈改成 3 圈。
+    * `npm --prefix tools test` 26 項通過（新增 `character.spec.js`）；移除 `public/Pal_test.png` 後重跑一樣通過。`public/` 從 2,488 KB 降到 411 KB。
+    * 本機伺服器實際試玩：森林與地牢地板、往左跑翻轉、手機直向，角色邊緣沒有白邊，console 沒有錯誤。

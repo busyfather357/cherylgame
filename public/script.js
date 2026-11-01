@@ -74,24 +74,15 @@ resizeCanvas(); // Initial call
 
 // --- 2. 遊戲設定 (關鍵修改區域) ---
 const gameConfig = {
-    frameWidth: 235.75, // Default/fallback
-    frameHeight: 306.25,
-    framesPerRow: 4,
-    scale: 50 / 235.75, // 調整為約 50px 寬度
     showDebugBox: false
 };
 
-// 預先計算繪製尺寸以優化效能
-gameConfig.drawWidth = gameConfig.frameWidth * gameConfig.scale;
-gameConfig.drawHeight = gameConfig.frameHeight * gameConfig.scale;
+// 玩家方塊的大小：碰撞範圍、出生位置、擊退都以它為準。跟角色圖片無關，換角色不會影響遊戲平衡
+const PLAYER_WIDTH = 50;
+const PLAYER_HEIGHT = 52;
 
-const animations = {
-    // [修正] 根據圖片一排 4 張的規則修改範圍
-    // 第一排 (0-3): 待機 (Idle)
-    idle: { start: 0, end: 3, speed: 6 },  
-    // 第二排 (4-7): 跑步 (Run) - 原本寫到 9 會跑到下一排去
-    run:  { start: 4, end: 7, speed: 12 }
-};
+// 玩家角色的精靈圖與動畫 (js/characters.js，由 tools/sprites.py 產生)
+const playerCharacter = CHARACTERS.knight;
 
 function createEmptyInventory() {
     return Object.fromEntries(ITEM_TYPES.map(item => [item, 0]));
@@ -101,8 +92,8 @@ const gameState = {
     action: "idle",
     index: 0,
     lastFrameTime: 0,
-    x: (W - gameConfig.drawWidth) / 2,
-    y: (H - gameConfig.drawHeight) / 2,
+    x: (W - PLAYER_WIDTH) / 2,
+    y: (H - PLAYER_HEIGHT) / 2,
     speed: 3,
     facingLeft: false,
     hp: 3,
@@ -212,15 +203,13 @@ function generateMap(level) {
 
 // 玩家的碰撞範圍：縮小並置中，碰撞起來比較自然
 function getPlayerHitbox(x, y) {
-    const drawW = gameConfig.drawWidth;
-    const drawH = gameConfig.drawHeight;
-    return { x: x + drawW / 4, y: y + drawH / 4, width: drawW / 2, height: drawH / 2 };
+    return { x: x + PLAYER_WIDTH / 4, y: y + PLAYER_HEIGHT / 4, width: PLAYER_WIDTH / 2, height: PLAYER_HEIGHT / 2 };
 }
 
 function getPlayerTile() {
     return {
-        c: Math.floor((gameState.x + gameConfig.drawWidth / 2) / TILE_SIZE),
-        r: Math.floor((gameState.y + gameConfig.drawHeight / 2) / TILE_SIZE)
+        c: Math.floor((gameState.x + PLAYER_WIDTH / 2) / TILE_SIZE),
+        r: Math.floor((gameState.y + PLAYER_HEIGHT / 2) / TILE_SIZE)
     };
 }
 
@@ -422,63 +411,12 @@ function checkCollision(rect1, rect2) {
 }
 
 // --- 4. 載入圖片 ---
+// 角色圖已經由 tools/sprites.py 去背、對齊、縮放，載入後直接使用 (private/doc/character_pipeline.md)
 const sprite = new Image();
-sprite.src = "Pal_test.png"; 
+sprite.src = playerCharacter.sheet;
 
 let spriteLoaded = false;
-let processedSpriteCanvas = null;
-
 sprite.onload = () => {
-    // 根據圖片實際大小自動計算精靈圖各幀的寬高，確保整數避免破圖
-    gameConfig.frameWidth = Math.floor(sprite.width / 4);
-    gameConfig.frameHeight = Math.floor(sprite.height / 5);
-
-    // 設定 scale，使角色繪製的寬度接近 50px (與 Emoji 一致)
-    gameConfig.scale = 50 / gameConfig.frameWidth;
-
-    // 重新計算 drawWidth 和 drawHeight
-    gameConfig.drawWidth = gameConfig.frameWidth * gameConfig.scale;
-    gameConfig.drawHeight = gameConfig.frameHeight * gameConfig.scale;
-
-    try {
-        // 建立離線畫布 (Offscreen Canvas) 進行去背
-        const offCanvas = document.createElement('canvas');
-        offCanvas.width = sprite.width;
-        offCanvas.height = sprite.height;
-        const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
-        offCtx.imageSmoothingEnabled = false;
-
-        // 將原圖畫上離線畫布
-        offCtx.drawImage(sprite, 0, 0);
-
-        // 取得像素資料
-        const imageData = offCtx.getImageData(0, 0, offCanvas.width, offCanvas.height);
-        const data = imageData.data;
-
-        // 遍歷所有像素，將接近白色的背景（淺色網格）的 Alpha 設為 0
-        for (let i = 0; i < data.length; i += 4) {
-            const r = data[i];
-            const g = data[i + 1];
-            const b = data[i + 2];
-
-            // 假設背景是白色或淺灰色 (可依實際情況調整閾值)
-            if (r > 210 && g > 210 && b > 210 &&
-                Math.abs(r - g) < 20 && Math.abs(r - b) < 20 && Math.abs(g - b) < 20) {
-                data[i + 3] = 0; // Alpha = 0 (透明)
-            }
-        }
-
-        // 將處理後的資料放回離線畫布
-        offCtx.putImageData(imageData, 0, 0);
-
-        // 儲存去背後的 Canvas
-        processedSpriteCanvas = offCanvas;
-        console.log("圖片載入成功且去背完成！", "自動計算 frameWidth:", gameConfig.frameWidth, "frameHeight:", gameConfig.frameHeight);
-    } catch (e) {
-        console.warn(e);
-        processedSpriteCanvas = sprite;
-    }
-
     spriteLoaded = true;
 };
 
@@ -527,14 +465,11 @@ function update(timestamp) {
         if (!isWallCollision(getPlayerHitbox(gameState.x, nextY))) gameState.y = nextY;
     }
 
-    const drawW = gameConfig.drawWidth;
-    const drawH = gameConfig.drawHeight;
-
     // 邊界檢查 (維持作為備用保護)
-    if (gameState.x < -drawW/2) gameState.x = -drawW/2;
-    if (gameState.x > worldW - drawW/2) gameState.x = worldW - drawW/2;
-    if (gameState.y < -drawH/2) gameState.y = -drawH/2;
-    if (gameState.y > worldH - drawH/2) gameState.y = worldH - drawH/2;
+    if (gameState.x < -PLAYER_WIDTH/2) gameState.x = -PLAYER_WIDTH/2;
+    if (gameState.x > worldW - PLAYER_WIDTH/2) gameState.x = worldW - PLAYER_WIDTH/2;
+    if (gameState.y < -PLAYER_HEIGHT/2) gameState.y = -PLAYER_HEIGHT/2;
+    if (gameState.y > worldH - PLAYER_HEIGHT/2) gameState.y = worldH - PLAYER_HEIGHT/2;
 
     // 自動切換動畫狀態
     if (isMoving && gameState.action !== "run") {
@@ -546,13 +481,9 @@ function update(timestamp) {
     }
 
     // 動畫播放邏輯
-    const currentAnim = animations[gameState.action];
-    if (timestamp - gameState.lastFrameTime > (1000 / currentAnim.speed)) {
-        gameState.index++;
-        const animLength = currentAnim.end - currentAnim.start + 1;
-        if (gameState.index >= animLength) {
-            gameState.index = 0;
-        }
+    const currentAnim = playerCharacter.animations[gameState.action];
+    if (timestamp - gameState.lastFrameTime > (1000 / currentAnim.fps)) {
+        gameState.index = (gameState.index + 1) % currentAnim.frames;
         gameState.lastFrameTime = timestamp;
     }
 
@@ -737,26 +668,15 @@ function drawWorld() {
 
     if (!spriteLoaded) return;
 
-    const currentAnim = animations[gameState.action];
-    const spriteIndex = currentAnim.start + gameState.index;
-    
-    // 計算在原圖中的位置
-    const col = spriteIndex % gameConfig.framesPerRow;
-    const row = Math.floor(spriteIndex / gameConfig.framesPerRow);
-
-    const sx = col * gameConfig.frameWidth;
-    const sy = row * gameConfig.frameHeight;
-
-    const drawW = gameConfig.drawWidth;
-    const drawH = gameConfig.drawHeight;
-    
-    const dx = gameState.x;
-    const dy = gameState.y;
+    const character = playerCharacter;
+    const currentAnim = character.animations[gameState.action];
+    const drawW = PLAYER_WIDTH;
+    const drawH = PLAYER_HEIGHT;
 
     ctx.save();
 
-    // 將座標系統原點移至角色中心，以便翻轉
-    ctx.translate(Math.floor(dx + drawW / 2), Math.floor(dy + drawH / 2));
+    // 將座標系統原點移至玩家方塊中心，以便翻轉 (角色圖都面向右)
+    ctx.translate(Math.floor(gameState.x + drawW / 2), Math.floor(gameState.y + drawH / 2));
     if (gameState.facingLeft) {
         ctx.scale(-1, 1);
     }
@@ -766,11 +686,16 @@ function drawWorld() {
         ctx.globalAlpha = 0.35;
     }
 
-    // 在中心點繪製（需往回位移半個寬高）
+    // 角色圖的腳底中心 (anchor) 對齊玩家方塊的底部中心。
+    // 角色是插畫，縮放時開啟平滑處理 (地圖與 emoji 維持關閉，restore() 會還原)
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    const cell = character.cell;
+    const scale = character.drawScale;
     ctx.drawImage(
-        processedSpriteCanvas || sprite,
-        Math.floor(sx), Math.floor(sy), Math.floor(gameConfig.frameWidth), Math.floor(gameConfig.frameHeight),
-        Math.floor(-drawW / 2), Math.floor(-drawH / 2), Math.floor(drawW), Math.floor(drawH)
+        sprite,
+        gameState.index * cell, currentAnim.row * cell, cell, cell,
+        -character.anchor[0] * scale, drawH / 2 - character.anchor[1] * scale, cell * scale, cell * scale
     );
     ctx.globalAlpha = 1;
 
@@ -921,8 +846,8 @@ function resumeGame() {
 
 // 將玩家往遠離碰撞來源的方向擊退；斜向被牆擋住時改沿單一軸滑動
 function applyKnockback(source) {
-    const drawW = gameConfig.drawWidth;
-    const drawH = gameConfig.drawHeight;
+    const drawW = PLAYER_WIDTH;
+    const drawH = PLAYER_HEIGHT;
     let dirX = 0;
     let dirY = 1; // 沒有來源資訊時維持往下彈
     if (source) {

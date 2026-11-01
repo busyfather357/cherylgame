@@ -20,9 +20,15 @@
         * `stages.js`：章節（每 10 關）、主題、每關的怪物組成與魔王。
         * `enemies.js`：怪物、寶箱、魔王的建立、移動、攻擊與繪製。
         * `touch.js`：觸控模式、浮動搖桿、道具按鈕、畫面方向、遊戲區域（地圖的繪製範圍）、`?debug`。
-    * `index.html`、`style.css`、`Pal_test.png`（角色精靈圖）、`shop_bg.webp`（商店背景圖）、`screenshot.png`（社群分享圖 og:image）。
-* `tools/`：本機開發工具，不部署（見「開發工具」）。`package.json`、`package-lock.json`（只有 `@playwright/test` 1.63.0）、`playwright.config.js`、`browser/`（瀏覽器測試與 `og-image.js`）；`node_modules/` 與工具輸出 `work/` 不進 git。
+        * `characters.js`：角色的精靈圖與動畫設定。**由 `tools/sprites.py` 產生，不要手動修改**。
+    * `characters/`：角色精靈圖，由 `tools/sprites.py` 產生。
+    * `index.html`、`style.css`、`shop_bg.webp`（商店背景圖）、`screenshot.png`（社群分享圖 og:image）。
+* `tools/`：本機開發工具，不部署（見「開發工具」）。
+    * Node + Playwright：`package.json`、`package-lock.json`（只有 `@playwright/test` 1.63.0）、`playwright.config.js`、`browser/`（瀏覽器測試與 `og-image.js`）。
+    * Python：`config.py`（共用路徑）、`sprites.py`（角色精靈圖建置）、`characters/`（每個角色的設定檔）、`tests/`（unittest）。
+    * `node_modules/` 與工具輸出 `work/` 不進 git。
 * `private/`：不部署。設計文件 `private/doc/`、`iframe.txt`（嵌入語法）。
+* `reference/`：本機參考素材（Gemini 原圖等），**不進 git**（`.gitignore`），也不部署。repo 盡量維持輕量，大型原圖放這裡，不要放進 `public/` 或 `private/`；雲端 agent 的環境裡沒有這個資料夾。
 * 根目錄：`AGENTS.md`（本檔）、`CLAUDE.md`、`README.md`、`.gitignore`。
 
 ## 本機執行與測試
@@ -43,7 +49,18 @@ npm --prefix tools ci
 | `npm --prefix tools run test:csp` | 開啟遊戲時沒有 console error（包含 CSP 擋下的資源） |
 | `npm --prefix tools run test:boss` | 強制進入第 5 關魔王關，截圖到 `tools/work/boss_level.png` |
 | `npm --prefix tools run test:touch` | 觸控搖桿、道具按鈕、遊戲區域與畫面方向（手機直向、平板橫向、電腦） |
+| `npm --prefix tools run test:character` | 角色圖載入成功，玩家碰撞範圍不受角色圖影響 |
 | `npm --prefix tools run og-image` | **覆寫 `public/screenshot.png`，也就是正式網站的社群分享圖**。只在要換分享圖時執行 |
+
+角色精靈圖（Python，使用系統 Python 已安裝的 Pillow 12.3.0，不另外安裝）。流程與 Gemini 生圖規範見 [`private/doc/character_pipeline.md`](private/doc/character_pipeline.md)：
+
+| 指令 | 內容 |
+|---|---|
+| `python -m tools.sprites <id>` | 依 `tools/characters/<id>.json` 與本機原圖 `reference/characters/<id>/` 重建角色：**寫入 `public/characters/<id>.png` 與 `public/js/characters.js`**，預覽與報告在 `tools/work/sprites/<id>/` |
+| `python -m tools.sprites --all` | 重建全部角色 |
+| `python -m tools.sprites --check` | 檢查 `public/` 的角色圖是否跟原圖與設定一致，不寫檔（原圖不在本機的角色略過） |
+| `python -m tools.sprites template` | 產生給 Gemini 參考的版面圖 `tools/work/sprites/template.png` |
+| `python -m unittest discover -s tools/tests -t .` | Python 工具的測試（離線、不需要原圖） |
 
 * 測試不用架伺服器：`tools/browser/site.js` 的 `routeSite()` 直接從硬碟提供 `public/`，連到其他網站（Google Tag Manager 等）的請求一律回空內容，不連網。
 * 報告在 `tools/work/playwright/report/index.html`，失敗截圖在 `tools/work/playwright/results/`。
@@ -67,12 +84,14 @@ npm --prefix tools ci
 * 獎勵數值：經驗值 `XP_REWARDS`（`js/experience.js`）、金幣 `GOLD_REWARDS`（`js/currency.js`）、道具價格 `SHOP_PRICES`（`js/shop.js`）、成就與鑽石 `ACHIEVEMENTS`（`js/achievements.js`）。鑽石目前只從成就取得、沒有用途；所有鑽石來源都要經過 `addDiamonds()`。
 * 難度數值：章節與每關的怪物數、障礙物比例 `CHAPTERS`（`js/stages.js`）；新怪物 `MONSTER_KINDS`、魔王 `BOSS_TYPES` 與攻擊間隔（`js/enemies.js`）；題目範圍與第 11 關起的難度（`js/questions.js`）。關卡相關的設定都由關卡數推算，不要存進存檔。
 * 新增怪物或魔王：敵人的 `type` 維持 `'monster'`／`'chest'`／`'boss'`，種類放在 `kind`（`tools/browser/spawn.spec.js` 依 `type` 檢查寶箱數）；碰到時算什麼由 `getContactType()` 決定，答對的獎勵類型放在敵人的 `reward`。每個攻擊前都要有預警。
+* **角色圖**：去背、切格、對齊、縮放都在 `tools/sprites.py` 建置時完成，遊戲只讀 `js/characters.js` 與 `characters/<id>.png` 直接繪製，不在執行期處理像素。要改角色就改 `tools/characters/<id>.json` 或原圖再重建，不要手動改產出。玩家方塊固定為 `PLAYER_WIDTH`×`PLAYER_HEIGHT`（50×52），碰撞、出生位置、擊退都以它為準，跟角色圖片無關；角色圖以腳底中心對齊方塊底部中心。
 * **CSP**：`index.html` 以 `<meta>` 設定 CSP，只允許本站與 Google Analytics／Tag Manager。不要引入外部 CDN、字型或腳本；確實需要時同步修改 CSP 並執行 `npm --prefix tools run test:csp`。
 
 ## 開發工具 (`tools/`)
-* 開發用的程式碼只放在 `tools/`（目前是 Node + Playwright 的瀏覽器測試，之後的 Python 工具也放這裡），根目錄不放零散的腳本。`public/` 不能連結、載入或依賴 `tools/` 的任何東西。
+* 開發用的程式碼只放在 `tools/`（Node + Playwright 的瀏覽器測試、Python 工具），根目錄不放零散的腳本。`public/` 不能連結、載入或依賴 `tools/` 的任何東西。
 * 瀏覽器測試一個檔案一項檢查：`tools/browser/<name>.spec.js`，檔案開頭註明檢查什麼；共用的程式放在 `tools/browser/site.js`。開頁面前先呼叫 `routeSite(page)`。
-* 瀏覽器測試只檢查、不改 `public/`。唯一會改 `public/` 的是 `og-image`（覆寫 `public/screenshot.png`）。
+* Python 工具一個工具一個模組，從 repo 根目錄以 `python -m tools.<module>` 執行，共用路徑放 `tools/config.py`，測試放 `tools/tests/test_<module>.py`（unittest）。只用維護者電腦系統 Python 已安裝的 Pillow 12.3.0，不建 venv、不另外安裝。
+* 瀏覽器測試只檢查、不改 `public/`。會改 `public/` 的只有 `og-image`（覆寫 `public/screenshot.png`）與 `tools.sprites`（角色圖與 `js/characters.js`）。
 * 截圖、報告等輸出一律放 `tools/work/`（不進 git），不要寫到 `public/`、`private/` 或根目錄。
 * **在維護者的電腦上不要自行安裝任何程式、套件或瀏覽器**（`npm install`、`npm ci`、`npx playwright install`、`pip install` 等），也不要用會自動下載的指令（例如沒加 `--no-install` 的 `npx`）。需要安裝時，把指令交給維護者手動執行。雲端 agent（例如 Jules）可以在自己的環境用 `npm --prefix tools ci` 照 lock 檔安裝，沒有瀏覽器時再執行 `npm --prefix tools exec -- playwright install --with-deps chromium`。
 * 新增或升級套件（npm 或 Python）要先經維護者同意，版本一律寫死（`tools/.npmrc` 是 `save-exact=true`）。Playwright 1.63.0 用的 chromium-1243 已經在維護者電腦的 `%LOCALAPPDATA%\ms-playwright`，升級 Playwright 要重新下載數百 MB 的瀏覽器，詢問時要說明。
@@ -86,4 +105,4 @@ npm --prefix tools ci
 
 ## 文件
 * 行為或架構改變時，同步更新 `private/doc/system_architecture.md`。
-* `private/iframe.txt` 的 `sandbox` 必須保留 `allow-same-origin`，拿掉會讓嵌入版無法存檔、角色出現白框；也不要把這段 iframe 放在 `mathrpg.mumuisland.com` 自己的頁面裡。原因見架構文件第 5 節。
+* `private/iframe.txt` 的 `sandbox` 必須保留 `allow-same-origin`，拿掉會讓嵌入版無法存檔；也不要把這段 iframe 放在 `mathrpg.mumuisland.com` 自己的頁面裡。原因見架構文件第 5 節。

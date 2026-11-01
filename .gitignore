@@ -28,3 +28,9 @@ test-results/
 __pycache__/
 tools/node_modules/
 tools/work/
+
+# =========================
+# 本機參考素材 reference/ (Gemini 原圖等，見 private/doc/character_pipeline.md)
+# 只留在本機、不進 git，讓 repo 維持輕量；需要備份請自行另存
+# =========================
+/reference/

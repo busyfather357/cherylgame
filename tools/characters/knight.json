@@ -1,0 +1,9 @@
+{
+    "name": "騎士",
+    "source": "Pal_test.png",
+    "animations": {
+        "idle": { "frames": [0, 1, 2, 3], "fps": 6 },
+        "run":  { "frames": [4, 5, 6, 7], "fps": 12 }
+    },
+    "colors": 64
+}
