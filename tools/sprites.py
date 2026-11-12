@@ -1,10 +1,11 @@
-"""角色精靈圖建置工具：原圖 (Gemini 生成) → 去背、切格、對齊、縮放、打包 → 遊戲用的角色圖與設定。
+"""角色精靈圖建置工具：原圖 (AI 生成) → 去背、切格、對齊、縮放、打包 → 遊戲用的角色圖與設定。
 
-設計與流程：private/doc/character_pipeline.md。只用 Pillow，不連網。
+設計與流程：private/doc/character_pipeline.md；原圖怎麼畫：private/doc/art_guide.md。只用 Pillow，不連網。
 
 每個角色：
 * 設定檔 tools/characters/<id>.json (進 git)。
-* 原圖放 reference/characters/<id>/ (只在本機，不進 git)。
+* 原圖放 reference/characters/<id>/ (不進 git)。reference/ 的正本在 Google Drive 上對照 repo 的資料夾，
+  Drive 有掛載時直接讀那裡，否則讀 repo 裡的 reference/ (見 tools/config.py)。
 產出：
 * public/characters/<id>.png：每格 cell×cell，每排一個動畫 (依設定檔 animations 的順序)，
   角色腳底中心固定在格子的 anchor。
@@ -322,7 +323,7 @@ def build_character(char_id: str, characters_dir: Path = config.CHARACTERS_DIR,
         if name not in sources:
             path = source_dir / name
             if not path.is_file():
-                raise MissingSource(f"找不到原圖 {config.display_path(path)} (原圖只在本機，不進 git)")
+                raise MissingSource(f"找不到原圖 {config.display_path(path)} (原圖不進 git，正本在 Google Drive)")
             with Image.open(path) as im:
                 size = im.size
                 bg = background_color(im)

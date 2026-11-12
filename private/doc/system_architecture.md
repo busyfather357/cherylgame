@@ -1,6 +1,6 @@
 # CherylGame (RPG Math Challenge) 系統架構與設計文件
 
-本文件旨在作為系統最終概念的完整快照，方便未來建立新的 GitHub repo 或由其他 AI Agent（如 Jules）接手時，能快速且精準地掌握這套為木木公主設計、支援 PC 與手機雙平台的 RPG 數學挑戰遊戲的核心邏輯與架構。
+本文件旨在作為系統最終概念的完整快照，方便未來建立新的 GitHub repo 或由其他 AI Agent（如 Google Antigravity）接手時，能快速且精準地掌握這套為木木公主設計、支援 PC 與手機雙平台的 RPG 數學挑戰遊戲的核心邏輯與架構。
 
 ## 1. 目錄與檔案結構
 
@@ -51,8 +51,9 @@ cherylgame/
 │   └── doc/
 │       ├── system_architecture.md  # 本系統架構與設計文件
 │       ├── item_system.md          # 道具系統設計文件
-│       └── character_pipeline.md   # 角色圖像生成流程評估 (Gemini 概念圖 → 精靈圖)
-├── reference/                  # 不進 git、不部署：本機參考素材 (Gemini 原圖等)；角色原圖在 reference/characters/<id>/
+│       ├── character_pipeline.md   # 角色圖像生成流程評估與 tools/sprites.py 的設計 (原圖 → 精靈圖)
+│       └── art_guide.md            # 美術素材生成規範：給 Google Antigravity 的畫圖規則與提示詞範本 (見 9.7)
+├── reference/                  # 不進 git、不部署：參考素材 (AI 生成的原圖等)，正本在 Google Drive 的對照資料夾 (見 9.7)；角色原圖在 reference/characters/<id>/，背景原圖在 reference/backgrounds/<id>/
 ├── AGENTS.md                   # 給 AI Agent 的工作指引 (執行方式、程式慣例、開發工具、Git 規則)
 ├── CLAUDE.md                   # 指向 AGENTS.md，並提醒 Claude Code 不改 git 狀態、不自行安裝
 ├── README.md                   # 專案基礎說明文件
@@ -624,7 +625,7 @@ cherylgame/
 * `boss.spec.js` 的截圖在 `tools/work/boss_level.png`。git 確認 `tools/node_modules/`、`tools/work/`、`.claude/launch.json` 被忽略，`tools/package.json`、`tools/package-lock.json`、`.npmrc`、設定檔與 spec 檔會進 git。
 
 ### 9.6 角色精靈圖 (`tools/sprites.py`)
-2026-11-01 加入，設計、方案比較與 Gemini 生圖規範見 [`character_pipeline.md`](character_pipeline.md)。
+2026-11-01 加入，設計與方案比較見 [`character_pipeline.md`](character_pipeline.md)；原圖怎麼畫見 [`art_guide.md`](art_guide.md)（9.7）。
 * 輸入：設定檔 `tools/characters/<id>.json`（進 git）＋原圖 `reference/characters/<id>/`（只在本機，不進 git）。設定檔欄位說明在 `tools/sprites.py` 開頭。
 * 輸出：`public/characters/<id>.png`、`public/js/characters.js`（所有角色），以及 `tools/work/sprites/<id>/` 的預覽圖 `preview.png`（兩種地板、碰撞範圍、腳底與頭頂掛點）、各動畫的 GIF、報告 `report.txt`（切出的每一格在原圖的位置、晃動量、檔案大小）。
 * 先處理完所有指定的角色，全部成功才寫檔。`--check` 重新處理一次並逐像素比較，原圖不在本機的角色略過（雲端 agent 的環境沒有原圖）。
@@ -633,3 +634,17 @@ cherylgame/
     * `python -m unittest discover -s tools/tests -t .` 16 項通過：以程式合成的綠幕原圖測試去背（角色內部的白色保留、沒有綠邊、雜點去掉）、切格順序、對齊、手動偏移、設定檔檢查與 `characters.js` 的讀寫。第一次執行發現頭與身體交接的凹角有綠色溢色殘留在離邊緣第 3 圈，despill 的範圍從 2 圈改成 3 圈。
     * `npm --prefix tools test` 26 項通過（新增 `character.spec.js`）；移除 `public/Pal_test.png` 後重跑一樣通過。`public/` 從 2,488 KB 降到 411 KB。
     * 本機伺服器實際試玩：森林與地牢地板、往左跑翻轉、手機直向，角色邊緣沒有白邊，console 沒有錯誤。
+
+### 9.7 美術素材的分工與交接
+2026-11-12 起。Jules 已停用，改用 Google Antigravity；它能直接讀寫 Google Drive，也能生圖。維護者決定：
+* **Antigravity 負責畫圖**（角色、背景的原圖），**Claude Code 負責程式與轉檔**。畫圖的規則、提示詞範本、核可流程在 [`art_guide.md`](art_guide.md)，取代 `character_pipeline.md` 第 6 節的生圖規範。
+* **Google Drive 的 `Antigravity_Data/cherylgame/` 對照 repo 的根目錄，資料夾結構完全相同**（維護者的電腦上是 `G:\我的雲端硬碟\Antigravity_Data\cherylgame\`）。git 管程式、設定、文件；Drive 放不適合進 git 的大型檔案：GitHub 的空間有限、刪除後仍留在歷史裡，Drive 空間大、刪除就能釋出。
+    * `reference/` 整個以 Drive 為正本：`reference/characters/<id>/`、`reference/backgrounds/<id>/` 放定稿，各自的 `drafts/` 放所有候選圖，`reference/style/` 放畫風基準圖。
+    * `tools/config.py`：`DRIVE_DIR` 預設是上面的掛載位置（環境變數 `CHERYLGAME_DRIVE_DIR` 可以改）；`pick_reference_dir()` 在 Drive 上有 `reference/` 時回傳它，否則回傳 repo 裡的 `reference/`（Drive 沒掛載、雲端 agent 的環境）。工具直接讀 Drive，不用複製。報告裡 Drive 上的檔案顯示成 `Drive:<相對路徑>`。
+    * Drive 上另外只放 `private/doc/art_guide.md` 的副本給美術 agent 讀；程式與其他文件不備份到 Drive。
+* `art_guide.md` 的技術規則是從 `tools/sprites.py` 的處理方式推出來的（從圖的邊緣去背、以最下緣當腳底、以空白帶切格等）。工具的行為改變時要同步修改它。
+* 2026-11-12 以 `tools/sprites.py` 的去背與切格實測 Antigravity 的第一張測試圖（牧師，1024×1024）：背景色與切格正常；水晶的光暈去背後留下 1168 個綠色像素、法杖與長袍之間的封閉小洞留下綠色、細描邊縮到 48px 幾乎看不見。規範因此要求不要發光、手與道具貼近身體、粗描邊。細節見 `art_guide.md` 第 11 節。
+* 尚未處理：
+    * 工具只去掉「跟圖的邊緣相連」的背景，手臂與身體圍出來的封閉小洞會留下背景色；跑步動畫難免出現，之後可以讓工具把角色內部顏色非常接近背景色的區域也去掉。
+    * 背景圖沒有轉檔工具（縮成 1600×1600、WebP、200 KB 以內），目前要手動處理。
+    * 提示詞範本還沒有實際生過圖，第一個角色做完後回寫。

@@ -4,6 +4,8 @@
 
 **進度**：2026-11-01 完成第 1 階段（第 8 節）：工具 `tools/sprites.py` 已建立，騎士已轉換成新格式，遊戲改讀 `js/characters.js`。第 1、2 節是改版前的評估紀錄。
 
+**2026-11-12**：畫圖改由 Google Antigravity 負責（Jules 已停用），生圖規則、提示詞範本、Google Drive 的資料夾與核可流程搬到 [`art_guide.md`](art_guide.md)，**第 6 節只留作紀錄，以 `art_guide.md` 為準**。`reference/` 整個改以 Google Drive 的對照資料夾 `Antigravity_Data/cherylgame/reference/` 為正本，工具直接讀那裡（架構文件 9.7）；下面提到「只在本機」的地方都是改版前的說法。
+
 ## 1. 現況：`Pal_test.png` 的實測問題
 
 以 Pillow 寫原型實際處理現有的 `Pal_test.png`，量到的問題：
@@ -107,8 +109,8 @@ tools/work/sprites/<id>/      # 預覽與報告（不進 git）
 ```
 
 * **原圖放 `reference/`，不進 git**（`.gitignore` 的 `/reference/`），讓 repo 維持輕量。設定檔是小小的文字檔，放在 `tools/characters/` 進 git：之後改參數或改流程時，只要本機有原圖，就能用同一份設定重建所有角色。
-    * `reference/` 沒有其他備份，原圖遺失時只剩 `public/` 裡已縮小的產出，要重建就得重新請 Gemini 畫。重要的原圖請自行另存（例如雲端硬碟）。
-    * 雲端 agent（Jules 等）的環境裡沒有原圖，不能重建角色，只能改遊戲程式。
+    * 2026-11-12 起，`reference/` 的正本在 Google Drive 的 `Antigravity_Data/cherylgame/reference/`（資料夾結構跟 repo 相同），騎士的原圖也放在那裡。Drive 有掛載時工具直接讀它。
+    * 讀不到 Drive、repo 裡也沒有 `reference/` 的環境不能重建角色。
 * **Python 使用維護者電腦的系統 Python 與已安裝的 Pillow 12.3.0**，不建 venv、不另外安裝任何套件。原型證明純 Pillow 就夠用。去背 AI 模型（rembg 等）要另外下載數百 MB，不採用；Gemini 依第 6 節畫出純色背景就不需要。
 
 ### 4.1 指令
@@ -134,8 +136,10 @@ tools/work/sprites/<id>/      # 預覽與報告（不進 git）
 9. **預覽與報告**（`tools/work/sprites/<id>/`）：`preview.png` 把精靈圖放在森林、地牢兩種地板上，畫出碰撞範圍、腳底、頭頂掛點；各動畫以遊戲大小放大 3 倍播放的 GIF；`report.txt` 列出切出的每一格在原圖的位置、晃動量、檔案大小與警告。
 
 ### 4.3 新增一個角色
-1. 照第 6 節請 Gemini 畫圖，存到 `reference/characters/<id>/`（`<id>` 用英文小寫，例如 `princess`）。
-2. 複製 `tools/characters/knight.json` 成 `tools/characters/<id>.json`，改 `name`、`source`；`frames` 先填 `[0, 1, 2, 3]`、`[4, 5, 6, 7]`。新的插畫風角色把 `colors` 拿掉（全彩）。
+1. 照 [`art_guide.md`](art_guide.md) 請 Antigravity 畫圖，核可的定稿會放在 Drive 的 `reference/characters/<id>/`（`<id>` 用英文小寫，例如 `princess`）。
+2. 複製 `tools/characters/knight.json` 成 `tools/characters/<id>.json`，改 `name`、`source`。新的插畫風角色把 `colors` 拿掉（全彩）。
+    * 待機與跑步各一張原圖（`art_guide.md` 的做法）：兩個動畫各自加上 `"source"`，`frames` 都填 `[0, 1, 2, 3]`。
+    * 兩個動畫畫在同一張圖（4 欄 × 2 排）：`frames` 填 `[0, 1, 2, 3]`、`[4, 5, 6, 7]`。
 3. 執行 `python -m tools.sprites <id>`，看 `tools/work/sprites/<id>/` 的 `report.txt`、`preview.png` 與 GIF：
     * 格子編號不對（例如多切出劍尖）：依報告改 `frames`。
     * 某一格位置怪怪的：用 `offsets` 微調；大小不對：改 `charHeight`。
@@ -158,6 +162,8 @@ tools/work/sprites/<id>/      # 預覽與報告（不進 git）
 * 架構文件 6 節建議鑽石之後只用於外觀，配件剛好可以接上；價格與取得方式屬於設計決策，要先確認。
 
 ## 6. Gemini 生圖規範
+
+> 2026-11-12：本節已由 [`art_guide.md`](art_guide.md) 取代，以下只留作紀錄。主要的差異：描邊從「細」改成「粗」、不再用 `chibi`、待機與跑步分成兩張圖、增加不要發光與封閉小洞等規則。
 
 固定的步驟，每一步都用上一步的圖當參考，角色才會一致：
 
