@@ -1,6 +1,8 @@
 # 美術素材生成規範（給 Google Antigravity）
 
-規範版本：2026-11-13 v3（正本在 git repo 的 `private/doc/art_guide.md`；Google Drive 上同一個路徑的檔案是副本，兩邊不同時以版本較新的為準）
+規範版本：2026-11-13 v4（正本在 git repo 的 `private/doc/art_guide.md`；Google Drive 上同一個路徑的檔案是副本，兩邊不同時以版本較新的為準）
+
+文件類型：**SOP**。專案的其他文件都在 git repo 的 `private/doc/`：文件地圖 `README.md`、每個角色做到哪一步的 `work_plan.md`、原圖轉成遊戲檔案的 `character_pipeline.md`、實測紀錄 `lessons_learned.md`。只讀得到 Drive 的時候，本文件加上該素材的需求單 `brief.md` 就足夠畫圖。
 
 這份文件給負責畫圖的 AI agent（Google Antigravity）閱讀，也是維護者下指令時的依據。內容是《RPG 數學挑戰：木木島趣味練習場》的角色圖與背景圖要怎麼畫、存在哪裡、怎麼交接。
 
@@ -16,7 +18,7 @@
 
 原圖會由 `tools/sprites.py` 自動處理。**第 6 節的技術規則不是美感偏好，而是這個工具的輸入條件**：不符合時工具會切錯、留下綠邊，或把角色的一部分吃掉，那張圖就只能重畫。
 
-遊戲裡的角色很小：在畫面上大約 **48 像素高**（原圖約 800 像素高，縮小 16 倍以上）。所有畫風規則都是為了「縮到 48 像素還看得清楚」。
+遊戲裡的角色很小：在畫面上大約 **48 像素高**（原圖約 800 像素高，縮小 16 倍以上）。所有畫風規則都是為了「縮到 48 像素還看得清楚」。唯一的例外是**全身圖**（6.11 節）：它在選角色介面與角色面板上放大給玩家看，臉、手與服裝的細節都看得到。
 
 ## 2. 最重要的規則（先讀這裡）
 
@@ -52,6 +54,7 @@ Antigravity_Data/cherylgame/          # = 專案根目錄
     │       ├── <id>_base_v08.png     # 這一層只放「定稿」：轉檔工具讀的就是這一層
     │       ├── <id>_idle_v01.png
     │       ├── <id>_run_v04.png
+    │       ├── <id>_full_v01.png     # 全身圖 (選角色介面、角色面板用，見 6.11)
     │       └── drafts/               # 所有生成的圖 (候選、重畫、被淘汰的) 都先放這裡
     │           ├── <id>_base_v01.png
     │           └── <id>_base_v02.png
@@ -64,14 +67,14 @@ Antigravity_Data/cherylgame/          # = 專案根目錄
 
 * `<id>`：英文小寫、數字、底線，例如 `cleric`、`ice_mage`、`shop`。它也是遊戲程式裡的名稱，定了就不要改。
 * 檔名：`<id>_<種類>_v<兩位數版本>.png`。
-    * 角色的種類：`base`（基準立繪）、`idle`（待機動畫）、`run`（跑步動畫）、`outfit_<名稱>`（造型變化）。
+    * 角色的種類：`base`（基準立繪）、`idle`（待機動畫）、`run`（跑步動畫）、`full`（全身圖）、`outfit_<名稱>`（造型變化）。
     * 背景沒有種類：`<id>_v01.png`。
     * 同一種類每生成一張就用下一個版本號（`v01`、`v02`…），不管它是候選還是重畫。**不覆寫舊檔**。
 * 格式：PNG（不要 JPEG，壓縮雜訊會讓去背的邊緣變髒）。存生圖工具的原始輸出，不縮放、不裁切。
 * 生成的圖一律先存到 `drafts/`。
 * 定稿：維護者說「核可 `<檔名>`」時，把那個檔案從 `drafts/` **複製**到上一層（`<id>/`），檔名不變，`drafts/` 裡的原檔留著。上一層同一種類只留一個檔案；換定稿時刪掉上一層舊的那個（它在 `drafts/` 還有一份）。
 * `drafts/` 裡的檔案由維護者決定什麼時候清理，美術 agent 不要自己刪。
-* Drive 根目錄的 `female_cleric_concept.png` 是改用本規範之前的測試圖（實測結果見第 11 節），不是定稿。
+* Drive 根目錄的 `female_cleric_concept.png` 是改用本規範之前的測試圖（實測結果見 `lessons_learned.md` 1.5），不是定稿。
 
 ## 4. 工作流程與核可關卡
 
@@ -83,11 +86,13 @@ Antigravity_Data/cherylgame/          # = 專案根目錄
 | 2. 待機動畫 | `<id>_idle_vNN.png`：一橫排 4 格 | 核可的 base | **停，等核可** |
 | 3. 跑步動畫 | `<id>_run_vNN.png`：一橫排 4 格 | 核可的 base | **停，等核可** |
 | 4. 造型變化（有需求才做） | `<id>_outfit_<名稱>_vNN.png` | 核可的 base | 核可後，新造型重做 2、3 |
+| 5. 全身圖 | `<id>_full_vNN.png`：一個角色、全身、姿勢與視角自由（6.11） | 核可的 base | **停，等核可** |
 
 * 基準立繪是之後所有圖的依據，值得多花時間；它沒過關就不要畫動畫。
 * 待機與跑步分成兩張圖畫，不要畫在同一張：每格的解析度比較高，也比較不會排錯。兩張圖的角色大小不需要相同（`tools/sprites.py` 會依各原圖第 1 格高度獨立計算縮放倍率）。
 * 動畫是最容易失敗的步驟：動作不連貫、每格的服裝不一樣、排版不照要求。工具能修正位置與大小，**修不了動作本身**。重畫 2 輪還是不行就回報，維護者可以決定這個角色只用靜態立繪。
 * 一次只改一件事：只改姿勢，或只改服裝，不要同時改。
+* 全身圖跟動畫互不相依，base 核可後隨時可以畫。每個角色都要有一張：選角色介面與角色面板顯示的就是它。
 
 ### 4.2 背景
 
@@ -211,7 +216,7 @@ View: full body, body in side view facing RIGHT, head turned slightly toward the
 | 規則 | 工具怎麼處理，違反時會怎樣 |
 |---|---|
 | 整片單一背景色 | 工具取四邊像素的顏色當背景色，從圖的邊緣往內去掉相近的顏色。背景有漸層或紋理就去不乾淨 |
-| 不要發光、光暈、半透明 | 光暈是角色色與背景色的混色，去背後會留下一圈綠色。實測第一張測試圖的水晶光暈留下 1100 多個綠色像素（第 11 節） |
+| 不要發光、光暈、半透明 | 光暈是角色色與背景色的混色，去背後會留下一圈綠色。實測第一張測試圖的水晶光暈留下 1100 多個綠色像素 |
 | 角色身上沒有背景色 | 跟背景色相近、又連到角色外面的部分會被當成背景挖掉 |
 | 手與道具貼近身體，法杖與裙擺之間保持開放通道 | 雖然 `tools/sprites.py`（2026-11-13 起）在綠幕／洋紅等高飽和度背景（`max(bg) - min(bg) > 100`）下，會一併清除角色內部與背景色接近的封閉小洞（如手肘彎曲處、雙腿邁開處），但若直立的法杖與飛揚的裙擺碰在一起圍成大面積封閉洞，內側的陰影與描邊反鋸齒仍可能殘留暗綠色。因此法杖底部與裙擺之間應保留開放的垂直通道（open vertical channel） |
 | 沒有地面陰影；沒有東西低於鞋底 | 工具把最下緣當成腳底來對齊。陰影或垂到腳下的披風會讓角色浮在半空 |
@@ -340,6 +345,40 @@ The whole body is inside the canvas with empty background margin on all four sid
 No text, letters, numbers, logos, watermark, signature, borders, frames, labels or UI.
 ```
 
+### 6.11 全身圖（步驟 5）
+
+全身圖是給玩家看的大圖：選角色介面與角色面板顯示的是它，不是精靈圖。`tools/sprites.py` 會把它去背、縮小到 512×768（角色約 676 像素高）、鋪上底色，存成 `public/characters/<id>_full.jpg`。它只縮小 2～3 倍，所以**畫壞的臉、手指、綠邊都看得到**，值得多挑幾張。
+
+跟基準立繪一樣的規則：
+
+* 一個角色，跟 base、動畫是**完全相同的角色**（附上核可的 base 當參考）。
+* 背景是一整片純綠（角色有綠色時用洋紅），不要自己畫場景或底色：底色由工具鋪上。
+* 不要地面陰影、發光、光暈、半透明的東西；角色身上沒有背景色。
+* 角色是一整塊：工具只取最大的一塊，飄在旁邊的東西不會出現在全身圖。
+* 全身都在畫面內、四周留空，不裁切。
+
+跟基準立繪不同的地方：
+
+| 項目 | 全身圖 | 原因 |
+|---|---|---|
+| 視角與方向 | 自由。建議正面或 3/4 視角，看得到整張臉 | 全身圖不會被水平翻轉，也不用跟精靈圖對齊 |
+| 姿勢 | 自由，可以比站姿生動。整個人（含武器、披風）的寬度不超過高度的 2/3 | 成品的畫面是 2:3，比這個寬的姿勢會被縮得比較小 |
+| 高過頭頂、低於鞋底 | 可以（例如比人高的法杖） | 全身圖不算頭頂掛點，腳底以整張圖的最下緣為準 |
+| 畫面比例 | 直式 3:4 或 2:3，角色高度約畫面的 85% | 直式的畫面裡角色的解析度比較高 |
+| 解析度 | 選最高的。角色至少 700 像素高，1500 像素以上更好 | 不到 676 像素高會被放大而模糊，工具會提醒 |
+
+提示詞用 6.6 的範本，把 `View`、`Pose`、`Canvas` 三行換成下面的寫法，STYLE LOCK 照抄，TECH LOCK 拿掉 `Nothing extends below the soles ... head or hat.` 那一行。**這個範本還沒有實測**（牧師的 `cleric_full_v01` 是維護者直接提供的圖，提示詞沒有留下紀錄），第一次實測後把有效的寫法回寫到這裡：
+
+```text
+Use the attached image as the exact character reference: same face, hair, outfit, colors, proportions, outline thickness and art style. Do not redesign or add anything.
+A single game character, alone on the canvas: [CHARACTER].
+View: full body, front 3/4 view, the face clearly visible and looking toward the viewer.
+Pose: [a natural, characteristic standing pose; what each hand holds, and how]. The whole figure including held items is clearly taller than it is wide.
+Canvas: portrait 3:4. The character is centered and about 85% of the canvas height.
+```
+
+維護者在對話中直接附上 JPEG 時，照 4.4 節轉存成 PNG 再歸檔；工具對全身圖會多做一道去邊，JPEG 壓縮滲進輪廓的綠色大多清得掉，但有原始的 PNG 時還是用 PNG。
+
 ## 7. 背景圖
 
 背景圖是鋪滿整個畫面的插圖，上面會蓋一個半透明的介面視窗（例如商店）。它不經過 `tools/sprites.py`，所以第 6 節的綠幕規則**不適用**；要注意的是構圖。
@@ -407,11 +446,17 @@ Composition: the main subject is in the horizontal center of the image and in th
 13. 每格的臉、髮型、服裝、顏色、道具跟 base 一樣嗎？道具有沒有換手？
 14. 待機：腳的位置每格都一樣嗎？跑步：4 格的腿是不是前後交替、能接回第 1 格？
 
+**全身圖**：檢查第 1～4、7、9 項（第 5、6 項不適用），再加上
+
+15. 跟 base 是不是同一個角色（臉、髮型、服裝、顏色、道具）？
+16. 用原本的大小看：臉、手指、道具有沒有畫壞？
+17. 角色是不是一整塊，沒有飄在旁邊的東西？整個人的寬度有沒有超過高度的 2/3？
+
 **背景圖**
 
-15. 主角的臉與上半身在安全區內嗎？
-16. 有沒有可讀的文字、商標、介面元素？
-17. 左右與下方是不是只有次要的場景？
+18. 主角的臉與上半身在安全區內嗎？
+19. 有沒有可讀的文字、商標、介面元素？
+20. 左右與下方是不是只有次要的場景？
 
 ## 9. 需求單與生圖紀錄
 
@@ -438,7 +483,7 @@ Composition: the main subject is in the horizontal center of the image and in th
 - 日期：2026-11-12
 - 步驟：1 基準立繪
 - 生圖工具／模型：（名稱與版本）
-- 規範版本：2026-11-13 v3
+- 規範版本：2026-11-13 v4
 - 附上的參考圖：無
 - 自我檢查：通過／第 N 項不合格（說明）
 - 提示詞：
@@ -453,11 +498,12 @@ Composition: the main subject is in the horizontal center of the image and in th
 * 維護者的電腦上，Google Drive 掛載在 `G:\我的雲端硬碟\`，對照專案根目錄的資料夾是 `G:\我的雲端硬碟\Antigravity_Data\cherylgame\`。
 * **`tools/` 的 Python 工具直接讀 Drive 的 `reference/`**（`tools/config.py` 的 `REFERENCE_DIR`），不用複製。Drive 沒有掛載、或 Drive 上沒有 `reference/` 時，才讀 repo 裡的 `reference/`。位置可以用環境變數 `CHERYLGAME_DRIVE_DIR` 改。
 * Claude Code 在 Drive 上只讀定稿（`<id>/` 那一層），不修改、不刪除美術 agent 的檔案；可以寫 `brief.md`。
-* **角色**：定稿已經在 `reference/characters/<id>/`。建立 `tools/characters/<id>.json`，執行 `python -m tools.sprites <id>`，看 `tools/work/sprites/<id>/` 的預覽與報告。細節見 [`character_pipeline.md`](character_pipeline.md) 4.3 節。
+* **角色**：定稿已經在 `reference/characters/<id>/`。建立 `tools/characters/<id>.json`，執行 `python -m tools.sprites <id>`，看 `tools/work/sprites/<id>/` 的預覽與報告。步驟見 [`character_pipeline.md`](character_pipeline.md) 第 2 節。
     * `source` 填定稿的檔名（含版本號，例如 `cleric_idle_v01.png`）。換定稿時檔名會變，要跟著改設定檔。
     * 待機與跑步是兩張原圖：`animations` 裡各自用 `"source"` 指定，例如 `"idle": { "source": "cleric_idle_v01.png", "frames": [0, 1, 2, 3], "fps": 6 }`。設定檔最上層的 `source` 填 idle 那張。`tools/sprites.py` 會依每張原圖各自的第 1 格身高分別計算縮放倍率，確保不同原圖的角色縮到相同的 `charHeight`（預設 96px）。
     * 只有基準立繪、沒有動畫的角色：`idle` 與 `run` 都用 `"frames": [0]`，角色是靜態的（程式動畫還沒做）。
     * 不用洋紅背景另外設定，工具會自己判斷背景色。
+    * 全身圖：設定檔加上 `"fullBody": { "source": "<id>_full_vNN.png" }`，重建後看 `public/characters/<id>_full.jpg`。只拿到全身圖的原圖、沒有精靈圖原圖的環境，用 `python -m tools.sprites --full-body <id>` 只重建全身圖。底色預設是米色，要換時加 `"background"`（見 `tools/sprites.py` 開頭）。
 * **背景**：把 `reference/backgrounds/<id>/` 的定稿縮成 1600×1600、WebP 品質 75、200 KB 以內，放到 `public/`（目前沒有專用工具；商店背景的版面見架構文件第 3 節）。
 * 轉檔時發現原圖不符合規則（留下綠邊、切格錯誤、動作不連貫），回報是哪一條，由維護者或 Antigravity 依規則重畫或局部修整；不要用手動 P 圖補救。規則本身不夠清楚時，修改本文件並提高規範版本。
 * 本文件修改後，提高開頭的規範版本，並把新版複製到 Drive 的同一個路徑（`Antigravity_Data/cherylgame/private/doc/art_guide.md`）。
@@ -474,42 +520,9 @@ Composition: the main subject is in the horizontal center of the image and in th
 | 角色配件（帽子等） | 還沒做；工具已經會算頭頂的位置 |
 | 標題畫面、章節過場 | 沒有 |
 
-## 11. 實測紀錄與待確認事項
+## 11. 實測紀錄
 
-### 11.1 2026-11-12：`female_cleric_concept.png`（改用本規範之前的測試圖）
+本文件只放規則與做法。每次生圖、轉檔的實測結果（哪個提示詞造成什麼問題、量到的數字、怎麼修正）記在 git repo 的 [`lessons_learned.md`](lessons_learned.md) 第 1 節；從實測學到、會改變做法的事，已經寫進本文件對應的規則。
 
-提示詞（節錄）：`... a cute RPG female cleric ... chibi proportions ... expressive big eyes, warm friendly smile ... holding a small wooden healing staff with a glowing crystal. Thin dark clean outline ...`。1024×1024。以 `tools/sprites.py` 的去背與切格實際處理：
-
-| 項目 | 結果 |
-|---|---|
-| 背景色 | 實際是 `#39CF3B`，不是 `#00FF00`；四邊最大色差 13，夠均勻，去背正常 |
-| 切格 | 正確切出 1 格（423×811） |
-| 水晶的光暈（`glowing`） | **不合格**：去背後水晶周圍留下一圈綠色，共 1168 個綠色像素 |
-| 法杖與長袍之間的封閉小洞 | **不合格**：留下一小塊綠色 |
-| 細描邊（`Thin`） | 縮到 48 像素高時幾乎看不見，在冰藍色地板上披風的輪廓不清楚 |
-| 畫風 | 約 2.5 頭身、大眼睛、腮紅：維護者覺得太可愛 |
-| 腳底、頭頂、面向、留空 | 合格 |
-
-本規範的 STYLE LOCK（粗描邊、不要腮紅）與 TECH LOCK（不要發光、手與道具貼近身體）就是針對這幾項寫的。
-
-### 11.2 2026-11-12～11-13：牧師（`cleric`）完整生圖與轉檔實戰紀錄
-
-以「Antigravity 撰寫提示詞與執行 `tools/sprites.py` 檢查 ＋ 維護者用 Gemini App 生圖並貼回對話視窗」的雙人協作流程，完成第一個新角色 `cleric` 的基準立繪、待機動畫、跑步動畫與轉檔：
-
-1. **畫風升級（等級 B → 等級 D）**：
-    * `cleric_base_v01`～`v05` 為 Antigravity 依舊版 3～3.5 頭身（等級 B）生成的候選圖。維護者審核後決定改用 **6～7 頭身成熟動漫奇幻風（等級 D）**。
-2. **基準立繪（`cleric_base_v06`～`v08`）的修正經驗**：
-    * `v06`：維護者先在 Gemini App 生成正面偏左、裙擺寬大碰到法杖、法杖鑲綠寶石、且法杖高過頭頂的圖。經 `tools/sprites.py` 實測，法杖與裙擺圍出的封閉區留下 9,418 個綠色像素，綠寶石也被染色。
-    * `v07`：提示詞改為面向右、天藍寶石、法杖低於兜帽，但裙擺右下角仍輕觸法杖底端，圍出封閉綠色三角形（11,698 個綠像素）。
-    * `v08`（定稿）：在 Gemini App 對 `v07` 下局部修改指令「把裙擺右下角往左收、與法杖之間留出開放綠色通道」，一次通過檢查（切出 1 格，縮至 96px 後殘留綠色像素 = `0`），同時作為 `reference/style/character_style.png`。
-3. **待機動畫（`cleric_idle_v01`）**：
-    * 附上 `cleric_base_v08.png` 並使用 6.7 節範本，一次通過：`1376×768` 自動切出 4 格（寬 249～258、高 516～523），畫面水平晃動 `0.0px`。
-4. **跑步動畫（`cleric_run_v01`～`v04`）與垂直投影切格的關鍵發現**：
-    * `v01`、`v02`：使用舊版長袍提示詞（`The robe hem swings with each step`），Gemini 畫出大幅向外飛揚的裙擺與披風，導致 4 格水平相連（`find_frames` 只切出 1 格）。且發現**拿已經是 4 個人的失敗圖在同一個 Gemini 對話要求拉開間距時，Gemini 只會重畫細節、不會移動 4 個人的水平位置**。
-    * `v03`：**開全新 Gemini 對話、只附上單人基準圖 `cleric_base_v08.png`**，並在提示詞強制要求「角色高度約 55%、裙擺與披風保持窄直不外飄（compact and narrow silhouette）、每格之間留極寬垂直綠幕通道」。結果第 1～2 格（間距 69px）、第 3～4 格（間距 63px）成功切開，只剩第 2 格最右側的法杖（`x=517`）與第 3 格向後踢的左腳靴跟（`x=518`）在垂直投影上重疊 1 像素。
-    * `v04`（定稿）：對 `v03` 下局部修改指令「只把左起第 3 個角色往後伸的左腳靴子往身體下方收攏」，第 2、3 格之間立刻讓出 36px 寬的垂直通道，完美切出 4 格（寬 200～210、高 403～407），畫面水平晃動僅 `0.5px`。
-5. **`tools/sprites.py` 的同步強化**：
-    * **高飽和度綠幕／洋紅背景自動清除內部封閉孔洞**：當背景色飽和度 `max(bg) - min(bg) > 100` 時，除了邊緣 flood fill 外，角色內部與背景色距離在 `tolerance` 內的像素也一併透明化並做溢色修正（因此跑步時雙腿邁開或手肘彎曲圍出的小綠洞會自動清乾淨，同時不影響 `Pal_test.png` 等灰白背景保留角色內部白色）。
-    * **忽略 1～2px 邊緣壓縮雜訊線**：JPEG 轉檔偶爾在畫布最下緣留下 1px 雜訊線，`find_frames` 自動略過寬或高 ≤ 2px 的細線。
-    * **不同原圖獨立計算縮放倍率**：`idle`（高 523px）與 `run`（高 407px）來自兩張不同原圖時，各自以該張原圖的第 1 格計算縮放倍率，確保打包進 `public/characters/cleric.png`（512×256，全彩 74.1 KB）時待機與跑步在畫面上都是 48px 高。
-
+* 每張圖的完整提示詞與自我檢查結果，照 9.2 記在該素材的 `log.md`（Drive）。
+* 發現規則不夠清楚或漏掉情況時：修改本文件並提高規範版本，把經過寫進 `lessons_learned.md`，再把新版複製到 Drive。
