@@ -23,6 +23,11 @@ const CHARACTERS = {
                 "idle": [[65, 24], [65, 26], [65, 24], [65, 23]],
                 "run": [[67, 24], [67, 24], [66, 24], [67, 24]]
             }
+        },
+        "fullBody": {
+            "image": "characters/cleric_full.jpg",
+            "width": 512,
+            "height": 768
         }
     },
     "knight": {

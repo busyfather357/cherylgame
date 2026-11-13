@@ -2,6 +2,12 @@
 
 本文件旨在作為系統最終概念的完整快照，方便未來建立新的 GitHub repo 或由其他 AI Agent（如 Google Antigravity）接手時，能快速且精準地掌握這套為木木公主設計、支援 PC 與手機雙平台的 RPG 數學挑戰遊戲的核心邏輯與架構。
 
+文件類型：**設計**。寫的是系統「現在是什麼樣子、為什麼這樣設計」。文件系統的分工見 [`README.md`](README.md)：
+
+* 還沒做的事與各項工作的狀態，彙整在 [`work_plan.md`](work_plan.md)；本文件裡的「尚未處理」只說明細節。
+* 每次改版的驗證結果與實測紀錄在 [`lessons_learned.md`](lessons_learned.md)，本文件不放流水帳。
+* **節號被 `AGENTS.md`、程式註解與其他文件引用，不要重新編號**；新的內容加在最後，或加成子節。
+
 ## 1. 目錄與檔案結構
 
 專案採用純前端靜態架構，搭配 Playwright 進行自動化測試驗證。網站以 Cloudflare Pages 部署到 `https://mathrpg.mumuisland.com/`，部署資料夾為 `public/`；其餘檔案不會出現在網站上。
@@ -22,9 +28,10 @@ cherylgame/
 │   │   ├── stages.js           # 章節、主題與每關數值 (見 7.1)
 │   │   ├── enemies.js          # 怪物、寶箱、魔王的建立、移動、攻擊與繪製 (見 7.2、7.3)
 │   │   ├── touch.js            # 觸控操作：浮動搖桿、道具按鈕、畫面方向、遊戲區域、?debug (見第 8 節)
-│   │   └── characters.js       # 角色的精靈圖與動畫設定，由 tools/sprites.py 產生 (見 2.1)
-│   ├── characters/             # 角色精靈圖 (Sprite Sheet)，由 tools/sprites.py 產生
-│   │   └── knight.png          # 騎士
+│   │   └── characters.js       # 角色的精靈圖、動畫設定與全身圖，由 tools/sprites.py 產生 (見 2.1)
+│   ├── characters/             # 角色圖，由 tools/sprites.py 產生
+│   │   ├── <id>.png            # 精靈圖 (Sprite Sheet)：knight 騎士、cleric 牧師
+│   │   └── <id>_full.jpg       # 全身圖，選角色介面與角色面板用 (見 2.1)：目前只有 cleric
 │   ├── shop_bg.webp            # 商店背景圖 (見第 3 節)
 │   └── screenshot.png          # 社群分享預覽圖 (og:image)，由 tools/browser/og-image.js 產生
 ├── tools/                      # 不部署：本機開發工具 (見第 9 節)
@@ -49,13 +56,17 @@ cherylgame/
 ├── private/                    # 不部署：設計文件與網站以外的檔案
 │   ├── iframe.txt              # 提供給外部網站嵌入用的 iframe 語法 (限制見第 5 節)
 │   └── doc/
-│       ├── system_architecture.md  # 本系統架構與設計文件
-│       ├── item_system.md          # 道具系統設計文件
-│       ├── character_pipeline.md   # 角色圖像生成流程評估與 tools/sprites.py 的設計 (原圖 → 精靈圖)
-│       └── art_guide.md            # 美術素材生成規範：給 Google Antigravity 的畫圖規則與提示詞範本 (見 9.7)
+│       ├── README.md               # 文件地圖：每份文件的類型、給誰讀、什麼時候更新
+│       ├── work_plan.md            # 計畫：工作計畫總表 (角色、功能、工具的狀態與待辦、已決定事項)
+│       ├── system_architecture.md  # 設計：本系統架構與設計文件
+│       ├── character_pipeline.md   # SOP：角色轉檔流程 (原圖 → 精靈圖與全身圖，tools/sprites.py)
+│       ├── art_guide.md            # SOP：美術素材生成規範，給 Google Antigravity 的畫圖規則與提示詞範本 (見 9.7)
+│       └── lessons_learned.md      # 經驗紀錄：實測數據、踩過的坑、每次改版的驗證結果
 ├── reference/                  # 不進 git、不部署：參考素材 (AI 生成的原圖等)，正本在 Google Drive 的對照資料夾 (見 9.7)；角色原圖在 reference/characters/<id>/，背景原圖在 reference/backgrounds/<id>/
-├── AGENTS.md                   # 給 AI Agent 的工作指引 (執行方式、程式慣例、開發工具、Git 規則)
-├── CLAUDE.md                   # 指向 AGENTS.md，並提醒 Claude Code 不改 git 狀態、不自行安裝
+├── .github/
+│   └── pull_request_template.md    # PR 說明的固定段落 (AGENTS.md 的「Git 與 PR 流程」)
+├── AGENTS.md                   # 給 AI Agent 的工作指引 (執行環境、文件地圖、程式慣例、開發工具、Git 與 PR 流程)
+├── CLAUDE.md                   # 指向 AGENTS.md，並依執行環境提醒 Claude Code 能不能改 git 狀態、能不能安裝
 ├── README.md                   # 專案基礎說明文件
 └── .gitignore                  # Git 忽略清單 (node_modules、tools/work/、本機設定等)
 ```
@@ -76,12 +87,13 @@ cherylgame/
 * **響應式畫布**：監聽 `resize`、`orientationchange` 與 `visualViewport` 的 `resize` 事件，動態調整 Canvas 寬高，並支援高解析度螢幕 (DPR) 確保畫質清晰。
     * 畫面大小只取一個來源：`getViewportSize()` 用 `visualViewport`（實際看得到的範圍，沒有時退回 `innerWidth/innerHeight`），畫布與 `<body>` 都設成這個大小；HUD、控制鍵、視窗都以 `<body>` 定位（`position: relative`），不會因為瀏覽器回報的高度不一致而跑到畫面外（見 8.1）。
     * 地圖格數依整個畫面決定；繪製時等比縮放並置中到「遊戲區域」`getPlayArea()`：觸控模式扣掉 HUD 與道具按鈕（見 8.3），其他情況是整個畫面。
-* **角色精靈圖**（2026-11-01 改版，設計與評估見 [`character_pipeline.md`](character_pipeline.md)）：
+* **角色精靈圖**（2026-11-01 改版，格式與轉檔流程見 [`character_pipeline.md`](character_pipeline.md)）：
     * 去背、切格、對齊、縮放都由 `tools/sprites.py` 在建置時完成，產出 `public/characters/<id>.png` 與 `js/characters.js`（全域 `CHARACTERS`）。遊戲載入後直接繪製，不在執行期處理像素。原本在 `script.js` 用 `getImageData` 動態去背的做法已移除（留下淺色白邊、角色在格子裡晃動，也曾因 tainted canvas 失效，見 5.2）。
     * 每格 128×128，每排一個動畫 (`idle`、`run`)，以 `drawScale` 0.5 畫成 64px；角色腳底中心 (`anchor`) 對齊玩家方塊的底部中心。
     * 玩家方塊固定 `PLAYER_WIDTH`×`PLAYER_HEIGHT`（50×52，跟改版前的繪製大小相同），碰撞範圍 `getPlayerHitbox()`、出生位置、擊退都以它為準，換角色不影響遊戲平衡。
     * 角色是插畫風，畫角色時開啟 `imageSmoothingEnabled`（品質 `high`），其他東西維持關閉。
-    * 目前只有騎士（`playerCharacter = CHARACTERS.knight`），原圖是改版前的 `Pal_test.png`（2 MB，已移到本機的 `reference/`，網站上的角色圖剩 13 KB）。
+    * 遊戲目前固定使用騎士（`playerCharacter = CHARACTERS.knight`），原圖是改版前的 `Pal_test.png`（2 MB，已移到 `reference/`，網站上的角色圖剩 13 KB）。牧師（`cleric`）的圖已經在 `public/characters/`，但選角色的介面還沒做，玩家還不能選。各角色的進度見 [`work_plan.md`](work_plan.md) 第 2 節。
+    * **全身圖**（2026-11-13）：每個角色另外有一張 `public/characters/<id>_full.jpg`，給選角色介面與之後的角色面板顯示（介面還沒做，遊戲目前沒有載入它）。512×768 的 JPEG，所有角色大小相同；JPEG 沒有透明，工具去背後鋪上底色（預設是題目視窗的米色）。路徑與大小在 `CHARACTERS[id].fullBody`（`image`、`width`、`height`）；還沒有全身圖的角色沒有這個欄位（目前騎士沒有，等維護者重畫）。原圖就是核可的基準立繪 `<id>_base_vNN.png`，不用另外畫。細節見 [`character_pipeline.md`](character_pipeline.md) 3.1 節。
 * **Emoji 向量渲染**：將地圖物件 (🌲, 🌊, 🧱) 與敵人 (👾, 🐉, 🎁) 等 Emoji 透過 SVG 包裝並轉換為 Image 物件快取，確保在 Canvas 縮放時保持向量圖的清晰度。
 
 ### 2.2 關卡與地圖生成 (Map Generation)
@@ -118,6 +130,21 @@ cherylgame/
     * **答對**：消滅該怪物（🐡 河豚要答對 2 次；若是 Boss 則扣除其生命值並將其隨機傳送），獲得經驗值與金幣（數值見 6.1；子彈題沒有獎勵）。恢復遊戲。原本的分數 (Score) 已由經驗值取代。
     * **答錯**：扣除 1 顆愛心 (HP)，觸發物理擊退效果 (Knockback)，強制玩家往後退一段距離避免連續碰撞。不扣經驗值與金幣。若 HP 歸零則觸發 Game Over；第 2 關以後可選擇從本關起點重來或從頭開始（見 4.5）。
     * 每一題（包含子彈題）的對錯都會記錄到答題統計，供成就系統使用（見 6.3）。
+
+### 2.6 道具
+四種道具定義在 `script.js` 的 `ITEM_TYPES`、`ITEM_INFO`；持有數量在 `gameState.inventory`，屬於本局進度（第 4 節）。
+
+| 道具 | id | 按鍵 | 效果 | 什麼時候能用 |
+|---|---|---|---|---|
+| 🧪 恢復藥水 | `potion` | 1 | 回復 1 點 HP | HP 未滿時 |
+| 🥾 神速靴 | `boots` | 2 | 5 秒內移動速度加倍（3 → 6） | 遊戲進行中；暫停（答題、選單）時不能用 |
+| 📜 提示卷軸 | `scroll` | 3 | 隱藏 2 個錯誤答案 | 題目視窗裡，每題一次 |
+| 🛡️ 無敵護盾 | `shield` | 4 | 5 秒內擋住怪物、子彈、衝撞與火焰；擋不住寶箱與魔王（2.4） | 遊戲進行中；暫停時不能用 |
+
+* **取得**：答對寶箱的題目得 1 個隨機道具（每關 1 個寶箱）；過關時在商店用金幣購買（6.4）。
+* **使用**：鍵盤數字鍵 1～4；觸控模式用道具按鈕（8.3）；提示卷軸另外有題目視窗裡的按鈕。商店開著時都不作用。
+* 時效以 `performance.now()` 計時（`speedBoostUntil`、`invincibleUntil`），進新關時清除，不存檔。
+* 新增道具要一起改的地方見 `AGENTS.md`「程式慣例」。原本的設計提案 `item_system.md` 已併入本節（2026-11-13）。
 
 ## 3. UI/UX 介面設計 (style.css & index.html)
 
@@ -242,32 +269,7 @@ cherylgame/
 * 選單文字沿用現有 UI 的英文風格（Math Challenge!、Game Over、Play Again）。
 
 ### 4.6 驗證方式
-2026-09-28 以 headless Chrome 實測以下 28 項全部通過，過程中沒有未攔截的例外或 console error：
-* 全新開始：第 1 關、不顯示歡迎視窗，寫入第 1 關存檔。
-* 過關：存下進入第 2 關當下的分數、HP、道具；關卡中途的變化不會被存。
-* 重新整理：顯示歡迎視窗並回到第 2 關起點；提示卷軸按鈕隱藏，按鍵 3 不會消耗卷軸；按 Continue 恢復遊戲。
-* Game Over：第 2 關以上可從本關重來（恢復進關時的數值）或從頭開始；第 1 關只有 Play Again。
-* 歡迎視窗按 New Game：回到第 1 關並覆蓋存檔。
-* 不合法的存檔（非 JSON、版本不符、`level` 為 0 或字串、`hp` 為 0、`score` 為負）→ 視為無存檔，從第 1 關開始。
-* `hp` 超過上限會被限制為 `MAX_HP`；負數、小數與不認識的道具欄位會被丟棄。
-* `?newgame`：忽略既有存檔並從第 1 關開始。
-* 讀到第 5 關存檔時正確生成魔王。
-* `sandbox="allow-scripts"` iframe：遊戲正常啟動、無法存檔，但 Game Over 仍可用記憶體中的 `checkpoint` 從本關重來。
-
-2026-09-28 改為 v2 後，以 Claude 內建瀏覽器 (Chromium) 實測以下項目，沒有未攔截的例外（唯一的 console error 是預覽環境連不到 Google Tag Manager）：
-* 答對怪物 +10 XP +5 🪙；寶箱另得道具；子彈題沒有獎勵；答錯只扣血。答題統計（總數、各運算、連續答對）正確累計。
-* 關卡中途的存檔：`profile` 已更新，`run` 仍是進關當下的 HP 與道具。
-* 過關：顯示過關選單；進入商店購買後金幣扣除、道具增加，`run` 與 `checkpoint` 都包含買到的道具；買不起的商品按鈕停用；商店開著時按數字鍵 1 不會使用藥水。
-* 重新整理：歡迎視窗顯示 Stage N，經驗值、金幣、鑽石、成就、道具都正確讀回。
-* 暫停中（歡迎視窗）無法使用護盾；恢復後可以使用。
-* 累計 50 XP 升到 Lv 2，顯示升級提示。
-* Game Over 顯示經驗值；從本關重來會回到進關時的 HP 與道具，經驗值不回溯；New Game 回到第 1 關，經驗值、金幣、鑽石保留。
-* 魔王：前 4 擊各 +10 XP +5 🪙，最後一擊 +60 XP +35 🪙，解鎖「第一次打倒魔王」。
-* v1 存檔（第 12 關、320 分）：轉成 320 XP（Lv 4），道具與 HP 保留，並解鎖「抵達第 10 關」；隨即以 v2 格式寫回。
-* 不合法的存檔：非 JSON、`v` 為 3、v1 的 `score` 為負或 `level` 為 0 → 無存檔；v2 的 `run` 不合格時只丟掉 `run`，`profile` 保留；`profile` 中的負數、字串、不認識的欄位與成就 id 被丟棄或改為預設值。
-* 讓 `window.localStorage` 丟出 `SecurityError`（模擬 sandbox iframe）：讀檔、答題、過關、商店購買都正常，進度保留在記憶體中。
-* 手機寬度 (375px)：HUD 換成三行，文字不重疊；商店四個商品排成 2×2，名稱不斷行；提示訊息顯示在 HUD 下方。
-* Playwright 測試 (`private/*.js`) 本次沒有執行：這台電腦沒有安裝 `node_modules`。
+2026-09-28 存檔 v1（28 項）與 v2 的實測結果：[`lessons_learned.md`](lessons_learned.md) 2.1。
 
 ### 4.7 存檔的限制
 * 存檔只存在「該瀏覽器 + 該網址來源 (origin)」。換裝置、換瀏覽器、無痕模式都不會帶過去。
@@ -456,19 +458,7 @@ cherylgame/
 * 答題統計仍依 `+`、`-`、`*` 分類，填空題依它的運算。
 
 ### 7.5 驗證方式
-2026-09-28 以 Claude 內建瀏覽器實測。瀏覽器窗格隱藏時 `requestAnimationFrame` 不會執行，所以在頁面中直接呼叫 `update()` 模擬時間。過程中沒有未攔截的例外（console error 只有預覽環境連不到 Google Tag Manager）：
-* 第 1～100 關抽查：章節、主題、魔王、怪物組成與障礙物比例符合 7.1；第 1 關仍是 1 個寶箱 + 4 隻 👾。
-* 新怪物：河豚答對 2 次才倒下，每次都有獎勵；眼鏡蛇只在 4 格內吐毒液；小幽靈隱身時碰不到，也不會在牆裡現身；飛碟會逃，獎勵 10 XP、10 金幣。
-* 魔王：
-    * 火龍第一發在開始移動 2.5 秒後，之後每 5 秒，生氣後 3.5 秒。
-    * 章魚王平常 4 方向，生氣後 8 方向；★ 章魚王 8 格血、間隔 4.2 秒。
-    * 犀牛王撞牆後暈倒，暈倒時答對顯示「Critical Hit! 💥」並扣 2 格；衝撞中碰到是子彈題（沒有獎勵）且護盾擋得住。
-    * 幽靈王召喚上限 2 隻；倒下時小幽靈一起消失並過關。
-    * 機器人的炸彈在預警時不觸發，爆炸時觸發子彈題，答錯被往炸彈反方向彈開；護盾擋得住。
-* 題目各 20000 題：第 5 關與原本相同（71% 的加減法只看個位數就能選對）；第 15 關填空 20%、進位／借位／6～9 乘法 84%、只看個位數能選對 0%。選項不重複、非負、包含正確答案；約 4000 題填空全部驗算正確，其他選項填進去都不成立。
-* 手機直向 (375×812，7×16 格)：第 11 關起少一隻怪物；章魚王生氣後十字、斜向輪流；幽靈王只召喚 1 隻；所有題目（包含填空題）在題目視窗中維持一行。
-* 存檔在第 30 關時重新整理：歡迎視窗按 Continue 後才顯示「⚠️ Boss: 犀牛王」，魔王血量 6。
-* Playwright 測試 (`private/*.js`) 本次沒有執行：這台電腦沒有安裝 `node_modules`。`verify.js` 已改為呼叫 `spawnEnemies()`（不再傳入數量）。
+2026-09-28 的實測結果：[`lessons_learned.md`](lessons_learned.md) 3.1。
 
 ## 8. 觸控操作與畫面方向 (js/touch.js)
 
@@ -550,22 +540,7 @@ cherylgame/
 * touch.js 在 script.js 之前載入，載入時只綁定事件；用到 script.js 的 `W`、`H`、`gameState` 等都在函式裡，第一次呼叫是 script.js 頂層的 `resizeCanvas()`（此時 `gameState` 還沒宣告，所以 `refreshTouchLayout()` 只有在「方向從不對變成正確」時才寫入 `gameState`，第一次呼叫不會發生）。
 
 ### 8.6 驗證方式
-2026-10-25 以 Claude 內建瀏覽器實測。窗格隱藏時 `requestAnimationFrame` 不會執行，所以以 `PointerEvent`（`pointerType: 'touch'`）模擬觸控，並直接呼叫 `update()` 推進時間。遊戲本身沒有未攔截的例外：
-* 手機直向 375×812：觸控模式、手機版面；地圖 7×16、每格約 42px，在 HUD 與道具按鈕之間；左下角顯示搖桿提示。
-* 搖桿：往右上拉 10 格畫面移動 (21.3, −21.3)；放開、`pointercancel` 後停止；拉 6px 不移動；往左偏下約 9° 吸附成正左（Y 不變）；拉到 180px 外時底座跟到手指後方 60px。
-* 鍵盤右下斜走 10 格畫面移動 (21.3, 21.3)，與搖桿斜走相同。
-* 正上方一排牆、往右上拉：沿著牆往右移動，Y 不變。
-* 一指按住搖桿時另一指按神速靴：道具使用、搖桿仍按住；數量標籤變成 x0 並變灰。
-* 出題時搖桿放開；0.3 秒內按正確答案沒有反應，之後按才算；恢復遊戲後原本那一指繼續拉不會移動，重新按下才會。
-* 手機轉成橫向：顯示旋轉提示，按方向鍵也不移動；關卡已觸發題目，地圖不重建。轉回直向後恢復，保護時間 1.5 秒。
-* iPad mini 橫向 1133×670（模擬時沒有觸控媒體查詢，第一次觸控才切換）：平板版面；地圖 22×13、每格約 47.5px，道具按鈕在右側且不重疊。轉成直向 744×1060：顯示旋轉提示。
-* 平板直向開啟、存檔在第 3 關：歡迎回來視窗與旋轉提示；轉成橫向後歡迎回來視窗還開著，地圖重建成 22×13。
-* 電腦 1024×768：不是觸控模式，沒有控制鍵，HUD 道具欄照常，地圖畫在整個畫面。`?debug` 顯示資訊與紅、黃框。
-* 嵌入版（手機上 355×288 的 iframe）：不顯示旋轉提示，遊戲區域 355×147。
-* Playwright（1.63.0，headless Chromium）：`test_touch.js` 在 iPad mini 橫向 1133×744、iPad 第 10 代橫向 1180×820、手機直向 375×812 各 17 項，加上電腦 1280×800 的 3 項，全部通過；`test_spawn.js`、`verify_csp.js`（沒有 console error）、`verify.js`（第 5 關魔王截圖）也都通過。`verify_csp.js` 覆寫的 `public/screenshot.png` 已還原成原本的分享圖。
-    * 本專案沒有自己的 `node_modules`；這次借用 `C:\GitHub\readbible` 已安裝的 Playwright（PowerShell：`$env:NODE_PATH = 'C:\GitHub\readbible\node_modules'`），沒有另外安裝。
-    * 2026-10-26 起這些測試搬到 `tools/browser/`（`test_touch.js` 改寫成 `touch.spec.js`，見第 9 節）。
-* **尚未在 iPad mini 實機上驗證**，畫面下半部被截斷的原因也還沒確認（見 8.1）。
+2026-10-25 的實測結果：[`lessons_learned.md`](lessons_learned.md) 4.1。自動化的檢查在 `tools/browser/touch.spec.js`。**尚未在 iPad mini 實機上驗證**，畫面下半部被截斷的原因也還沒確認（見 8.1、8.7）。
 
 ### 8.7 尚未處理與已知限制
 * 實機驗證：iPad mini 的 Safari（以及平常開啟的方式，例如 LINE）用 `?debug` 截圖，確認 8.1 的原因已排除。
@@ -583,23 +558,14 @@ cherylgame/
 * AGENTS.md 加上「agent 在維護者電腦上不自行安裝」與「本機 agent 不改 git 狀態」兩條規則，並新增 `CLAUDE.md`。
 
 ### 9.1 搬移與刪除
-| 原本 | 現在 |
-|---|---|
-| `private/test_spawn.js` | `tools/browser/spawn.spec.js` |
-| `private/verify_csp.js` | 檢查：`tools/browser/csp.spec.js`；覆寫分享圖：`tools/browser/og-image.js` |
-| `private/verify.js`（8000 埠） | `tools/browser/boss.spec.js`；截圖改存 `tools/work/boss_level.png`（不進 git） |
-| `private/test_touch.js` | `tools/browser/touch.spec.js` |
-| 根目錄 `package.json`、`package-lock.json`（playwright 1.59.1，從來沒有安裝過） | `tools/package.json`、`tools/package-lock.json`（`@playwright/test` 1.63.0） |
-| `private/boss_level.png`、`server.log`、`test-results/` | 刪除（測試產物）。`.gitignore` 加上 `*.log`、`test-results/`、`tools/node_modules/`、`tools/work/`、`.claude/launch.json` 等 |
-
-`private/` 只剩設計文件與 `iframe.txt`。
+2026-10-26 把 `private/` 的測試檔搬到 `tools/browser/`、刪除測試產物的對照表：[`lessons_learned.md`](lessons_learned.md) 5.1。`private/` 只剩設計文件與 `iframe.txt`。
 
 ### 9.2 執行方式
 從 repo 根目錄執行，指令表在 AGENTS.md 的「本機執行與測試」：
 * `npm --prefix tools test`：全部的瀏覽器測試；`npm --prefix tools run test:touch` 等只跑一個檔案。
 * `npm --prefix tools run og-image`：覆寫 `public/screenshot.png`。只在要換分享圖時執行。
 * 報告：`tools/work/playwright/report/index.html`；失敗截圖：`tools/work/playwright/results/`。
-* `python -m tools.sprites <id>`／`--all`／`--check`／`template`：角色精靈圖（見 9.6）。
+* `python -m tools.sprites <id>`／`--all`／`--check`／`--full-body <id>`／`template`：角色精靈圖與全身圖（見 9.6）。
 * `python -m unittest discover -s tools/tests -t .`：Python 工具的測試。
 
 ### 9.3 寫法
@@ -616,35 +582,34 @@ cherylgame/
 * Playwright 1.63.0 用的 chromium-1243 已經在 `%LOCALAPPDATA%\ms-playwright`（所有專案共用），不用再下載瀏覽器。
 
 ### 9.5 驗證方式
-2026-10-26，`tools/node_modules/` 的 `@playwright/test` 1.63.0（headless Chromium，8 個 worker 平行執行）：
-* `npm --prefix tools test` 共 25 項：spawn、csp、boss 各 1 項，touch 22 項（3 種觸控裝置各 7 項，加上電腦 1 項）。
-* 第一次執行 24 項通過、1 項失敗：iPad 第 10 代的「斜走碰到牆會沿著牆滑動」原本先拉 200ms 讓角色走到牆邊，平行執行時畫面更新次數不夠，角色還沒碰到牆。改成用 `isWallCollision()` 直接把角色貼到牆下，不靠等待時間。這是測試寫法的問題，遊戲本身沒有改。
-* 修正後以 `--repeat-each=3` 執行 75 項全部通過（38.8 秒）；「沿著牆滑動」單獨重複 5 次（15 項）也全部通過。
-* 測試前後 `public/` 所有檔案的 hash 相同，瀏覽器測試沒有改到網站檔案。
-* `og-image` 產生 1280×720 的第 1 關畫面；驗證完已把 `public/screenshot.png` 還原成原本的分享圖。
-* `boss.spec.js` 的截圖在 `tools/work/boss_level.png`。git 確認 `tools/node_modules/`、`tools/work/`、`.claude/launch.json` 被忽略，`tools/package.json`、`tools/package-lock.json`、`.npmrc`、設定檔與 spec 檔會進 git。
+2026-10-26 的實測結果：[`lessons_learned.md`](lessons_learned.md) 5.2。
 
 ### 9.6 角色精靈圖 (`tools/sprites.py`)
-2026-11-01 加入，設計與方案比較見 [`character_pipeline.md`](character_pipeline.md)；原圖怎麼畫見 [`art_guide.md`](art_guide.md)（9.7）。
-* 輸入：設定檔 `tools/characters/<id>.json`（進 git）＋原圖 `reference/characters/<id>/`（只在本機，不進 git）。設定檔欄位說明在 `tools/sprites.py` 開頭。
-* 輸出：`public/characters/<id>.png`、`public/js/characters.js`（所有角色），以及 `tools/work/sprites/<id>/` 的預覽圖 `preview.png`（兩種地板、碰撞範圍、腳底與頭頂掛點）、各動畫的 GIF、報告 `report.txt`（切出的每一格在原圖的位置、晃動量、檔案大小）。
+2026-11-01 加入。格式與轉檔步驟見 [`character_pipeline.md`](character_pipeline.md)；原圖怎麼畫見 [`art_guide.md`](art_guide.md)（9.7）；當初的方案比較見 [`lessons_learned.md`](lessons_learned.md) 1.2。
+* 輸入：設定檔 `tools/characters/<id>.json`（進 git）＋原圖 `reference/characters/<id>/`（正本在 Google Drive，不進 git，見 9.7）。設定檔欄位說明在 `tools/sprites.py` 開頭。
+* 輸出：`public/characters/<id>.png`、全身圖 `public/characters/<id>_full.jpg`（設定檔有 `fullBody` 時）、`public/js/characters.js`（所有角色），以及 `tools/work/sprites/<id>/` 的預覽圖 `preview.png`（兩種地板、碰撞範圍、腳底與頭頂掛點）、各動畫的 GIF、報告 `report.txt`（切出的每一格在原圖的位置、晃動量、檔案大小）。
 * 先處理完所有指定的角色，全部成功才寫檔。`--check` 重新處理一次並逐像素比較，原圖不在本機的角色略過（雲端 agent 的環境沒有原圖）。
-* 驗證（2026-11-01 騎士、2026-11-13 牧師）：
-    * 騎士（`knight`）：從 `Pal_test.png` 自動切出 20 格，取前 8 格；頭部水平晃動 idle 0px、run 1px（畫面上）；精靈圖 512×256、64 色、12.8 KB。處理約 1.6 秒，`--check` 一致。
-    * 牧師（`cleric`）：由兩張 16:9 綠幕原圖 `cleric_idle_v01.png`（1376×768）與 `cleric_run_v04.png`（1376×768）各切出 4 格，依各原圖第 1 格身高（523px 與 407px）獨立計算倍率縮至 96px 高；頭部水平晃動 idle 0.0px、run 0.5px（畫面上）；精靈圖 `public/characters/cleric.png` 512×256、全彩、74.1 KB，`--check` 一致。
-    * `python -m unittest discover -s tools/tests -t .` 19 項通過（`test_sprites.py` 17 項 + `test_config.py` 2 項）：包含綠幕內部封閉孔洞自動清除（同時保留灰白背景角色內部白色）、不同原圖獨立縮放倍率、切格順序、對齊、手動偏移、設定檔檢查與 `characters.js` 的讀寫。
-    * `npm --prefix tools test` 26 項通過（`character.spec.js` 自動驗證 `CHARACTERS` 內含 `cleric` 與 `knight` 的所有圖片載入與尺寸）。
+* 全身圖（2026-11-13）：
+    * 原圖去背後取最大的一塊當角色，等比例縮放到 512×768 的畫面裡（四周留 6%），左右置中、腳底貼齊下方的留白線，鋪上底色後存成 JPEG（品質 85、色度不抽樣、漸進式）。
+    * 全身圖只縮小 2～3 倍，精靈圖用的去背留下的幾像素綠邊會看得出來，所以多一道去邊 `clean_edges()`：由外往內最多剝 8 圈還帶著背景色的像素，再對邊緣 16 圈做溢色修正。只處理綠幕、洋紅背景。
+    * `--full-body <id>` 只重建全身圖與 `characters.js` 的 `fullBody`，不讀動畫的原圖、不動精靈圖。雲端 agent 的環境讀不到 Drive，通常只拿得到維護者在對話中重新附上的那一張定稿。
+    * `--check` 對全身圖不是逐位元組比較：大小相同，而且色差超過 8 的像素不到千分之一就算一致（JPEG 是有損壓縮，不同作業系統的結果可能有極小的差異）。設定檔沒有 `fullBody` 但圖還在、或圖沒有對應的設定檔，也會列出來。
+* 每次轉檔與測試的實測數據：[`lessons_learned.md`](lessons_learned.md) 1.6、1.7、5.3。
 
 ### 9.7 美術素材的分工與交接
 2026-11-12 起。Jules 已停用，改用 Google Antigravity；它能直接讀寫 Google Drive，也能生圖。維護者決定：
-* **Antigravity 負責畫圖與檢查**（撰寫提示詞、用 `tools/sprites.py` 檢查、歸檔至 Google Drive），亦可搭配**維護者的 Gemini App** 生圖並貼回對話視窗以避開內建 `generate_image` 的配額限制（每 5 小時 2～3 張）。畫圖的規則、提示詞範本、核可流程在 [`art_guide.md`](art_guide.md)，取代 `character_pipeline.md` 第 6 節的生圖規範。
+* **Antigravity 負責畫圖與檢查**（撰寫提示詞、用 `tools/sprites.py` 檢查、歸檔至 Google Drive），亦可搭配**維護者的 Gemini App** 生圖並貼回對話視窗以避開內建 `generate_image` 的配額限制（每 5 小時 2～3 張）。畫圖的規則、提示詞範本、核可流程在 [`art_guide.md`](art_guide.md)（取代 2026-11-01 寫在 `character_pipeline.md` 的第一版生圖規範，差異見 [`lessons_learned.md`](lessons_learned.md) 1.4）。
 * **Google Drive 的 `Antigravity_Data/cherylgame/` 對照 repo 的根目錄，資料夾結構完全相同**（維護者的電腦上是 `G:\我的雲端硬碟\Antigravity_Data\cherylgame\`）。git 管程式、設定、文件；Drive 放不適合進 git 的大型檔案：GitHub 的空間有限、刪除後仍留在歷史裡，Drive 空間大、刪除就能釋出。
     * `reference/` 整個以 Drive 為正本：`reference/characters/<id>/`、`reference/backgrounds/<id>/` 放定稿，各自的 `drafts/` 放所有候選圖，`reference/style/` 放畫風基準圖（`character_style.png` 已放入核可的 `cleric_base_v08.png`）。
     * `tools/config.py`：`DRIVE_DIR` 預設是上面的掛載位置（環境變數 `CHERYLGAME_DRIVE_DIR` 可以改）；`pick_reference_dir()` 在 Drive 上有 `reference/` 時回傳它，否則回傳 repo 裡的 `reference/`（Drive 沒掛載、雲端 agent 的環境）。工具直接讀 Drive，不用複製。報告裡 Drive 上的檔案顯示成 `Drive:<相對路徑>`。
     * Drive 上另外只放 `private/doc/art_guide.md` 的副本給美術 agent 讀；程式與其他文件不備份到 Drive。
 * `art_guide.md` 的技術規則是從 `tools/sprites.py` 的處理方式推出來的（從圖的邊緣去背、以最下緣當腳底、以垂直投影空白帶切格等）。工具的行為改變時要同步修改它。
-* 2026-11-12～11-13 完成第一個新角色 `cleric`（牧師）的完整生圖與轉檔，解決並回寫了以下項目（細節見 `art_guide.md` 11.2 節）：
-    * **綠幕內部封閉小洞**：`tools/sprites.py` 在高飽和度背景（`max(bg) - min(bg) > 100`）下，會一併清除角色內部與背景色接近的像素並做溢色修正，解決跑步時手肘與雙腿間圍出小綠洞的問題。
-    * **垂直投影切格與跑步裙擺**：4 格動畫切格依賴整條由上到下暢通的垂直空白欄，已在提示詞範本加入窄輪廓（compact and narrow silhouette）與 55% 高度規則。
-* 尚未處理：
+* 第一個新角色 `cleric`（牧師）的生圖與轉檔經過（2026-11-12～11-13）：[`lessons_learned.md`](lessons_learned.md) 1.6、1.7。
+* 尚未處理（彙整在 [`work_plan.md`](work_plan.md) 第 4 節）：
     * 背景圖沒有轉檔工具（縮成 1600×1600、WebP、200 KB 以內），目前要手動處理。
+
+### 9.8 執行環境與交付（2026-11-13）
+* agent 可能在兩種環境執行：維護者的電腦（本機），或雲端的容器／VM（Google Antigravity、claude.ai/code 的 Claude Code 雲端工作階段）。能不能改 git 狀態、能不能安裝，依環境而定，規則在 `AGENTS.md` 的「執行環境」。
+* 雲端 agent 的交付方式是 PR：步驟在 `AGENTS.md` 的「Git 與 PR 流程」，PR 說明的固定段落在 `.github/pull_request_template.md`。`main` 是正式網站的來源，只有維護者合併。
+* 雲端環境讀不到 Google Drive：沒有 `reference/` 的原圖，`--check` 會略過讀不到原圖的角色。需要原圖時由維護者在對話中附上；先確認它是 Drive 上的哪一個檔案，照那個檔名使用。確定是 Drive 上還沒有的新圖，才在 PR 的「合併後維護者要做的事」請維護者放到 Drive。
+* 為什麼需要這一節：[`lessons_learned.md`](lessons_learned.md) 6.1。

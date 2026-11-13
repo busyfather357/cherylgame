@@ -1,61 +1,54 @@
-# 角色圖像生成流程評估（Gemini 概念圖 → 遊戲角色）
+# 角色轉檔流程（原圖 → 遊戲用的檔案）
 
-2026-11-01 評估。目標：用 Gemini 畫角色概念圖，再用 `tools/` 裡的 Python 工具轉成遊戲可用的角色圖，之後可以反覆用同一套流程增加角色，並保留換裝、配件等外觀變化的空間。維護者已經決定的事項見第 9 節。
+文件類型：**SOP**。把核可的角色原圖轉成遊戲用的精靈圖與全身圖：要改哪些檔案、執行什麼指令、怎麼檢查。文件系統的分工見 [`README.md`](README.md)。
 
-**進度**：2026-11-01 完成第 1 階段（第 8 節）：工具 `tools/sprites.py` 已建立，騎士已轉換成新格式，遊戲改讀 `js/characters.js`。第 1、2 節是改版前的評估紀錄。
+* 原圖怎麼畫是另一份 SOP：[`art_guide.md`](art_guide.md)。每個角色做到哪一步：[`work_plan.md`](work_plan.md) 第 2 節。
+* 為什麼採用這個做法（2026-11-01 的實測與方案比較）、每次轉檔的實測數據：[`lessons_learned.md`](lessons_learned.md) 第 1 節。
+* 工具的行為改變時要同步修改本文件；`art_guide.md` 的技術規則是從工具的處理方式推出來的，也要一起看。
 
-**2026-11-12**：畫圖改由 Google Antigravity 負責（Jules 已停用），生圖規則、提示詞範本、Google Drive 的資料夾與核可流程搬到 [`art_guide.md`](art_guide.md)，**第 6 節只留作紀錄，以 `art_guide.md` 為準**。`reference/` 整個改以 Google Drive 的對照資料夾 `Antigravity_Data/cherylgame/reference/` 為正本，工具直接讀那裡（架構文件 9.7）；下面提到「只在本機」的地方都是改版前的說法。
+## 1. 總覽
 
-## 1. 現況：`Pal_test.png` 的實測問題
+```text
+需求單 brief.md ─→ 畫圖 (art_guide.md) ─→ 維護者核可，定稿放 reference/characters/<id>/
+                                                        │
+設定檔 tools/characters/<id>.json ─→ python -m tools.sprites <id> ─→ 看預覽與報告
+                                                        │
+          public/characters/<id>.png、<id>_full.jpg、public/js/characters.js ─→ 測試 ─→ PR
+```
 
-以 Pillow 寫原型實際處理現有的 `Pal_test.png`，量到的問題：
+| 東西 | 位置 | 進 git | 誰負責 |
+|---|---|---|---|
+| 原圖（定稿與候選） | `reference/characters/<id>/`，正本在 Google Drive | 否 | Antigravity 畫、維護者核可 |
+| 角色設定檔 | `tools/characters/<id>.json` | 是 | 做轉檔的 agent |
+| 工具 | `tools/sprites.py`、`tools/config.py`、`tools/tests/` | 是 | Claude Code |
+| 精靈圖、全身圖、角色設定 | `public/characters/<id>.png`、`<id>_full.jpg`、`public/js/characters.js` | 是（會部署） | 工具產生，**不手動修改** |
+| 預覽與報告 | `tools/work/sprites/<id>/` | 否 | 工具產生 |
 
-| 項目 | 實測 | 影響 |
-|---|---|---|
-| 檔案大小 | 943×1225、2,088 KB，佔整個 `public/`（2,488 KB）的 **84%** | 手機第一次開遊戲時大部分流量在下載這張圖，但角色在畫面上只有約 50px 寬 |
-| 實際用到的格數 | 4×5 = 20 格，只用前 2 排 8 格（idle、run） | 後 3 排（揮劍等）白白下載 |
-| 等分切格 | 943 / 4 = 235.75 不是整數；第 1 排角色實際在 y = 19～247，程式切在 245 | 待機時腳底被切掉；跑步時頭頂出現上一排腳尖的灰色雜點 |
-| 角色在格子裡的位置 | 頭部水平位置在畫面上晃動 idle 2.1px、run 1.7px | 原地待機看起來在抖 |
-| 執行期去背 | `script.js` 載入時用 `getImageData` 把接近白色的像素設為透明 | 留下淺色反鋸齒白邊（深色地牢地板上看得到）；角色內部的白色（例如後 3 排的白披風）也會被挖掉；每次載入在主執行緒跑 115 萬個像素；曾因 tainted canvas 失效（架構文件 5.2） |
-| 動畫內容 | 「idle」那排其實是走路，第 4 格是衝刺；run 最後一格舉劍 | AI 一次畫整張 sheet 的典型問題，見第 2 節 |
-| 換裝 | 每格都是重畫的，盔甲、頭的位置每格不同 | 沒有辦法在上面疊帽子或換衣服 |
+* 工具只用 Pillow 12.3.0（系統 Python 已安裝的，不建 venv、不另外安裝），不連網。產出以這個版本為準。
+* 工具讀原圖的位置：Drive 有掛載時直接讀 Drive 的 `reference/`，否則讀 repo 裡的 `reference/`（`tools/config.py`）。雲端環境讀不到 Drive：只拿得到維護者在對話中附上的圖。**先問清楚那張圖是 Drive 上的哪一個檔案**（通常就是已經核可的定稿，維護者只是重新傳一次），照 Drive 上的檔名放進 repo 裡的 `reference/characters/<id>/`（不進 git）再建置；確定是 Drive 上還沒有的新圖時，才在 PR 請維護者放到 Drive。
 
-背景是淺灰色的格線紙，很可能是要求 AI 畫「透明背景」時，它畫出了假的透明格子。Gemini 輸出的圖沒有透明通道，**要請它畫純色背景，再由工具去背**。
+## 2. 新增或更新一個角色（步驟）
 
-### 1.1 原型的處理結果
-同一張圖改用「工具在建置時處理」的做法（第 4 節的流程），結果：
-
-* 自動找到 5 排、20 格，不依賴等分格子；腳底不再被切、沒有鄰格雜點。
-* 從圖片邊緣 flood fill 去背：只去掉跟外面相連的背景，角色內部的白色保留；再去掉一圈淺色反鋸齒，白邊消失。
-* 以「腳底 + 上半身中心」對齊後，頭部晃動降到 idle 0.5px、run 1.0px。
-* 只打包 8 格、每格 128×128（約畫面大小的 2 倍，高 DPR 螢幕也清楚）：PNG 95 KB、WebP 無損 72 KB、**64 色 PNG 13 KB（目視與全彩無差異）**。也就是 2 MB → 13 KB。
-* 純 Python + Pillow，處理一張約 2.5 秒。
-
-**結論：不論角色怎麼生成，「去背、切格、對齊、縮放、壓縮」都應該從遊戲執行期移到 `tools/` 的建置步驟。** 現在就能做，而且遊戲畫面幾乎不變、只有變乾淨。
-
-## 2. 方案比較
-
-角色在畫面上約 47px 高。評估的重點是：每多一個角色要花多少工夫、Gemini 能不能穩定做出來、之後能不能換裝。
-
-| 方案 | 每個新角色的工作 | 動畫 | 換裝空間 | 遊戲端改動 |
-|---|---|---|---|---|
-| **A. 逐格精靈圖**（現行做法標準化）：Gemini 依參考圖畫整張 sheet，工具清理 | 1 張參考圖 + 1 張 sheet，通常要重畫幾次挑最好的 | 最生動；但 AI 畫的循環動作常不連貫，工具修不了 | 每格姿勢不同：配件要靠每格的掛點；整套換裝要重畫整張 sheet | 小 |
-| **B. 單張立繪 + 程式動畫**：一張側面站姿，程式加上彈跳、壓縮伸展、傾斜 | 1 張圖，幾乎一次成功 | 較單調，跑步時腳不會動（可加 2 格踏步改善，就變成 A 的 2 格版） | 最容易：只有一個姿勢，配件位置固定，換裝只要讓 Gemini 改同一張圖 | 小 |
-| C. 部件拆分（頭、身體、手腳分開，用骨架擺動） | 要請 Gemini 分別畫出各部件（含被遮住的部分），每個角色手動設定關節位置 | 平順，但有「紙偶」感 | 最自由，可以只換帽子、只換上衣 | 中：要寫骨架動畫 |
-| D. 3D（圖轉 3D 模型 → 綁骨 → 算繪成精靈圖，或用 three.js） | 多個外部工具，部分要手動操作 | 最一致 | 好 | three.js 要放進 `public/` 並改 CSP；預先算繪則遊戲端不變 |
-
-* **D 不建議**：工具鏈太重（Blender、自動綁骨服務），對畫面上 47px 的角色效益太低。
-* **C 先不做**：換裝最自由，但每個角色都要人工拆部件、設關節，跟「反覆、快速增加角色」的目標相反。等外觀系統真的需要自由混搭時再評估，到時在第 3 節的格式加上圖層欄位。
-* **A 與 B 用同一套格式**：B 就是每個動畫只有 1 格的 A，再加上程式動畫。
-
-### 建議
-1. 遊戲維持精靈圖（sprite sheet），但改成「工具產生的標準格式 + 角色設定檔」，每個動畫可以是 1～N 格。
-2. 每個新角色先試 A（Gemini 畫 idle + run 各 4 格）；做不出可用的循環動作時，退回 B（單張立繪 + 程式動畫）。兩種角色在遊戲裡混用沒有問題。
-3. 外觀變化從「配件掛點」開始做（第 5 節），它對 A、B 兩種角色都適用。
+1. **確認原圖已經定稿**：`reference/characters/<id>/` 那一層有核可的 `<id>_base_vNN.png`、`<id>_idle_vNN.png`、`<id>_run_vNN.png`（`art_guide.md` 第 3、4 節）。`<id>` 用英文小寫，定了就不要改。
+2. **設定檔**：新角色複製 `tools/characters/cleric.json` 成 `tools/characters/<id>.json`，改 `name` 與各個 `source`（檔名含版本號；換定稿時檔名會變，要跟著改）。欄位說明在 `tools/sprites.py` 開頭。
+    * 待機與跑步各一張原圖（`art_guide.md` 的做法）：兩個動畫各自加上 `"source"`，`frames` 都填 `[0, 1, 2, 3]`；最上層的 `source` 填待機那張。
+    * 兩個動畫畫在同一張圖（4 欄 × 2 排）：`frames` 填 `[0, 1, 2, 3]`、`[4, 5, 6, 7]`。
+    * 只有基準立繪、沒有動畫：`idle` 與 `run` 都用 `"frames": [0]`，角色是靜態的。
+    * 全身圖：加上 `"fullBody": { "source": "<id>_base_vNN.png" }`，原圖就是核可的基準立繪。
+    * 新的插畫風角色不要設 `colors`（全彩）。洋紅背景不用另外設定，工具會自己判斷背景色。
+3. **建置**：`python -m tools.sprites <id>`。只拿得到基準立繪、沒有動畫原圖的環境，用 `python -m tools.sprites --full-body <id>`。
+4. **看結果**，有問題照 4.3 調整後重建：
+    * `tools/work/sprites/<id>/report.txt`：切出的格數對不對、有沒有「注意」。
+    * `preview.png` 與各動畫的 GIF：有沒有綠邊、腳底是不是在同一條線、動作連不連貫、頭部晃動幾像素。
+    * `public/characters/<id>_full.jpg`：邊緣有沒有綠邊、有沒有被放大而模糊。
+5. **原圖本身有問題**（留下綠邊、切格錯誤、動作不連貫）：回報是 `art_guide.md` 的哪一條，由維護者或 Antigravity 重畫；不要手動修圖。規則不夠清楚就修改 `art_guide.md`。
+6. **測試**：`python -m tools.sprites --check`、`python -m unittest discover -s tools/tests -t .`、`npm --prefix tools run test:character`。
+7. **在遊戲裡看效果**：遊戲目前固定使用騎士（`public/script.js` 的 `playerCharacter = CHARACTERS.knight`），選角色的介面還沒做。可以暫時改這一行試玩，看完改回來，不要提交。
+8. **更新文件並交付**：[`work_plan.md`](work_plan.md) 第 2 節的狀態、有新的實測經驗時寫進 [`lessons_learned.md`](lessons_learned.md)，再照 `AGENTS.md` 的「Git 與 PR 流程」交付。
 
 ## 3. 遊戲使用的格式
 
-每個角色兩個產出，都由工具產生、不手動修改：
+精靈圖與所有角色的設定，都由工具產生、不手動修改（全身圖見 3.1）：
 
 * `public/characters/<id>.png`：打包後的精靈圖。每格固定大小（預設 128×128），每排一個動畫，角色腳底中心固定在格子的同一點。
 * `public/js/characters.js`：所有角色的設定（classic script，全域 `const CHARACTERS`，跟其他系統檔案一樣在 `script.js` 之前載入；不用 `fetch`，CSP 不用改）。
@@ -90,28 +83,28 @@ const CHARACTERS = {
 * 單張立繪的程式動畫 (`motion`) 與分層紙娃娃 (`layers`) 等到真的需要時再加欄位。
 * **碰撞框與圖片脫鉤**：改版前玩家的碰撞範圍由 `gameConfig.drawWidth/drawHeight`（圖片繪製大小，約 50×52）推算，換角色就會跟著變。現在是固定常數 `PLAYER_WIDTH`×`PLAYER_HEIGHT`（50×52），圖片以 `anchor` 對齊玩家方塊底部中心繪製，換角色不影響遊戲平衡與觸控測試。
 * 精靈圖都畫成面向右，面向左時沿用 `ctx.scale(-1, 1)` 翻轉，掛點跟著一起翻。
-* 角色是平滑插畫（第 9 節），畫角色時開啟 `imageSmoothingEnabled`（品質 `high`），`ctx.restore()` 時還原；地圖與 emoji 維持關閉。
+* 角色是平滑插畫，畫角色時開啟 `imageSmoothingEnabled`（品質 `high`），`ctx.restore()` 時還原；地圖與 emoji 維持關閉。
 * 去背在建置時完成，`script.js` 原本用 `getImageData` 去背的程式已刪除，tainted canvas 的問題也不會再出現。
 
-## 4. 工具設計 (`tools/sprites.py`)
+### 3.1 全身圖（2026-11-13）
 
-照架構文件 9.3 節的 Python 工具慣例（與 mumuisland-web 相同）：一個工具一個模組、共用路徑放 `tools/config.py`、測試放 `tools/tests/`。
+精靈圖在畫面上只有 48px 高。選角色介面與之後的角色面板需要看得清楚的大圖，所以每個角色另外有一張全身圖，同樣由工具產生、不手動修改：
 
-```
-tools/
-    config.py                 # 共用路徑
-    sprites.py                # 工具本體；設定檔欄位的說明在檔案開頭
-    characters/<id>.json      # 每個角色的設定：原圖、動畫用哪幾格、輸出大小、手動修正（進 git）
-    tests/test_sprites.py     # 用程式合成的綠幕原圖測試，不需要真實原圖
-reference/characters/<id>/    # Gemini 原圖（只在本機，不進 git）
-public/characters/<id>.png、public/js/characters.js   # 產出（進 git、會部署）
-tools/work/sprites/<id>/      # 預覽與報告（不進 git）
+* `public/characters/<id>_full.jpg`：512×768（2:3）。所有角色大小相同，介面排版不用依角色調整；角色四周留 6% 的空白，左右置中、腳底在同一個高度。
+* **格式是 JPEG**（維護者決定）。牧師的全身圖實測：JPEG 53 KB、PNG 210 KB、WebP 29 KB。JPEG 沒有透明，所以工具去背後直接鋪上底色：預設是題目視窗的米色放射漸層（中央 `#FFF8DC`、四角 `#E6C992`），設定檔的 `fullBody.background` 可以換成單色或另外兩個顏色。
+    * 底色是圖的一部分，介面不能再換。之後如果需要去背的全身圖（疊在其他背景上、把還沒解鎖的角色變成剪影），要改成有透明的 WebP：去背後的圖在 `compose_full_body()` 鋪底色之前就有了，改動不大。
+* `characters.js` 多一個欄位；還沒有全身圖的角色沒有這個欄位，介面要能處理：
+
+```js
+        "fullBody": { "image": "characters/cleric_full.jpg", "width": 512, "height": 768 }
 ```
 
-* **原圖放 `reference/`，不進 git**（`.gitignore` 的 `/reference/`），讓 repo 維持輕量。設定檔是小小的文字檔，放在 `tools/characters/` 進 git：之後改參數或改流程時，只要本機有原圖，就能用同一份設定重建所有角色。
-    * 2026-11-12 起，`reference/` 的正本在 Google Drive 的 `Antigravity_Data/cherylgame/reference/`（資料夾結構跟 repo 相同），騎士的原圖也放在那裡。Drive 有掛載時工具直接讀它。
-    * 讀不到 Drive、repo 裡也沒有 `reference/` 的環境不能重建角色。
-* **Python 使用維護者電腦的系統 Python 與已安裝的 Pillow 12.3.0**，不建 venv、不另外安裝任何套件。原型證明純 Pillow 就夠用。去背 AI 模型（rembg 等）要另外下載數百 MB，不採用；Gemini 依第 6 節畫出純色背景就不需要。
+* **原圖就是核可的基準立繪** `reference/characters/<id>/<id>_base_vNN.png`（[`art_guide.md`](art_guide.md) 6.11 節），不用另外畫，也不是精靈圖的某一格：動畫原圖每格只有 400～500px 高，基準立繪是一整張圖畫一個角色，解析度高得多。`fullBody.source` 可以指向資料夾裡的任何一張定稿，維護者之後想換一張圖當全身圖時改這裡。
+* 遊戲還沒有用到它（選角色介面排在 [`work_plan.md`](work_plan.md) 第 3 節）。CSP 的 `img-src 'self'` 已經允許；介面打開時才載入，不要在遊戲一開始就載入所有角色的全身圖。
+
+## 4. 工具 (`tools/sprites.py`)
+
+一個工具一個模組、共用路徑放 `tools/config.py`、測試放 `tools/tests/test_sprites.py`（用程式合成的綠幕原圖，不需要真實原圖）。去背 AI 模型（rembg 等）要另外下載數百 MB，不採用；原圖照 `art_guide.md` 畫成純色背景就不需要。
 
 ### 4.1 指令
 | 指令 | 內容 |
@@ -119,7 +112,8 @@ tools/work/sprites/<id>/      # 預覽與報告（不進 git）
 | `python -m tools.sprites knight` | 重建一個角色：寫入 `public/characters/knight.png`、更新 `public/js/characters.js`、產生預覽 |
 | `python -m tools.sprites --all` | 重建全部角色 |
 | `python -m tools.sprites --check` | 只檢查 `public/` 的產出是否跟原圖與設定一致，不寫檔（原圖不在本機的角色略過） |
-| `python -m tools.sprites template` | 產生給 Gemini 參考的版面圖 `tools/work/sprites/template.png`（4 欄 × 2 排、每格有腳底基準線、純綠背景） |
+| `python -m tools.sprites --full-body cleric` | 只重建全身圖 `public/characters/cleric_full.jpg` 與 `characters.js` 的 `fullBody`，精靈圖不動；只需要 `fullBody.source` 那一張原圖 |
+| `python -m tools.sprites template` | 產生給生圖模型參考的版面圖 `tools/work/sprites/template.png`（4 欄 × 2 排、每格有腳底基準線、純綠背景） |
 | `python -m unittest discover -s tools/tests -t .` | 工具的測試 |
 
 ### 4.2 處理流程
@@ -130,25 +124,31 @@ tools/work/sprites/<id>/      # 預覽與報告（不進 git）
 3. **切格**：找橫向、直向的空白帶分出每一格（忽略寬或高 ≤ 2px 的邊緣壓縮雜訊線），不假設格子等分；Gemini 排得不整齊也能切。分離的劍尖等小塊會被當成一格，報告會提醒。
 4. **對應動畫**：`"idle": { "frames": [0, 1, 2, 3] }` 指定用自動找到的第幾格，可以重新排序、去掉畫壞的格子；不同動畫可以來自不同張原圖。
 5. **對齊**：腳底 = 角色最下緣；水平 = 上半身（頭與軀幹）像素的中位數，不受劍、披風、腿影響。個別格子可以手動加偏移。
-6. **縮放**：同一張原圖的所有格子用同一個倍率（以該張原圖採用的第 1 格縮到指定身高，預設 96px）；當 `idle` 與 `run` 來自不同張原圖且原圖角色高度不同時，各自以該張原圖的第 1 格計算倍率，確保每個動畫在畫面上都是相同的身高。用高品質縮小 (Lanczos)，適合平滑插畫；不做像素風專用的處理（第 9 節）。
+6. **縮放**：同一張原圖的所有格子用同一個倍率（以該張原圖採用的第 1 格縮到指定身高，預設 96px）；當 `idle` 與 `run` 來自不同張原圖且原圖角色高度不同時，各自以該張原圖的第 1 格計算倍率，確保每個動畫在畫面上都是相同的身高。用高品質縮小 (Lanczos)，適合平滑插畫；不做像素風專用的處理。
 7. **掛點**：估算每格頭頂的位置（頭部上方 20% 的水平中心、最上緣），寫入 `attach.head`。
 8. **打包與壓縮**：排成每排一個動畫。色數在設定檔指定：插畫的漸層限制色數容易出現色帶，預設全彩（約 70～95 KB，仍比改版前小 20 倍以上）；騎士這類色塊分明的圖設 64 色（12.8 KB）。看預覽沒有色帶再降。
 9. **預覽與報告**（`tools/work/sprites/<id>/`）：`preview.png` 把精靈圖放在森林、地牢兩種地板上，畫出碰撞範圍、腳底、頭頂掛點；各動畫以遊戲大小放大 3 倍播放的 GIF；`report.txt` 列出切出的每一格在原圖的位置、晃動量、檔案大小與警告。
+10. **全身圖**（設定檔有 `fullBody` 時，3.1 節）：全身圖的原圖用同樣的方式去背，取最大的一塊當角色（切出不只一塊時報告會提醒）→ 去邊 → 等比例縮放到 512×768 的畫面裡 → 鋪上底色 → 存成 JPEG（品質 85、色度不抽樣、漸進式）。
+    * 去邊 (`clean_edges()`)：精靈圖縮小 16 倍以上，第 2 步留下的幾像素綠邊看不出來；全身圖只縮小 2～3 倍，生圖模型的柔邊與 JPEG 壓縮滲進輪廓的背景色會變成一圈明顯的綠邊。所以由外往內最多再剝 8 圈「還帶著背景色」的像素（背景的主色比其他色版高出 24 以上），乾淨的像素留著；剩下的邊緣 16 圈再做溢色修正。只處理綠幕、洋紅背景。牧師的原圖去邊前有 15,673 個偏綠的像素，去邊後 0 個。
+    * 原圖裡的角色不到 676px 高時會被放大，報告會提醒。
+    * `--check` 對全身圖不是逐位元組比較：大小相同，而且色差超過 8 的像素不到千分之一就算一致。JPEG 是有損壓縮，同一份原圖與設定在不同作業系統上的結果可能有極小的差異。
 
-### 4.3 新增一個角色
-1. 照 [`art_guide.md`](art_guide.md) 請 Antigravity 協作畫圖，核可的定稿會放在 Drive 的 `reference/characters/<id>/`（`<id>` 用英文小寫，例如 `cleric`）。
-2. 複製 `tools/characters/knight.json` 成 `tools/characters/<id>.json`，改 `name`、`source`。新的插畫風角色把 `colors` 拿掉（全彩）。
-    * 待機與跑步各一張原圖（`art_guide.md` 的做法）：兩個動畫各自加上 `"source"`，`frames` 都填 `[0, 1, 2, 3]`。
-    * 兩個動畫畫在同一張圖（4 欄 × 2 排）：`frames` 填 `[0, 1, 2, 3]`、`[4, 5, 6, 7]`。
-3. 執行 `python -m tools.sprites <id>`，看 `tools/work/sprites/<id>/` 的 `report.txt`、`preview.png` 與 GIF：
-    * 格子編號不對（例如多切出劍尖）：依報告改 `frames`。
-    * 某一格位置怪怪的：用 `offsets` 微調；大小不對：改 `charHeight`。
-    * 背景沒去乾淨或角色被吃掉：調整 `tolerance`。
-4. 遊戲目前固定使用騎士 (`playerCharacter = CHARACTERS.knight`)，選角色的介面還沒做（第 8 節第 3 階段）。想在遊戲裡先看效果，可以暫時改這一行，看完改回來。
+### 4.3 看報告與調整
 
-## 5. 外觀變化（道具、服裝）
+| 現象 | 做法 |
+|---|---|
+| 格子編號不對（例如多切出劍尖、雜點） | 依 `report.txt` 列出的每一格改 `frames` |
+| 某一格位置怪怪的 | 用 `offsets` 微調那一格 |
+| 角色太大、邊緣被裁掉，或太小 | 改 `charHeight`（或加大 `cell`） |
+| 背景沒去乾淨，或角色被吃掉 | 調整 `tolerance` |
+| 全身圖切出不只一格 | 工具只用最大的一格；其他部分是不是應該連在角色身上，回頭看原圖 |
+| 全身圖被放大而模糊 | 原圖裡的角色不到 676px 高，要重畫比較大的 |
+| 全身圖的底色要換 | `fullBody` 加上 `"background"`：`"#RRGGBB"`，或 `["中央", "四角"]` 兩個顏色 |
+| `--check` 報不一致 | 原圖或設定改過就重建；沒改過的話看 Pillow 版本是不是 12.3.0。不同作業系統重建的精靈圖可能差幾個像素（`lessons_learned.md` 6.1），不要因此覆寫沒有改過的角色 |
 
-由簡單到複雜分成 4 層。第 1 層需要的頭頂掛點，工具已經寫進 `characters.js`；其他層等要做時再擴充格式：
+## 5. 外觀變化（道具、服裝；之後的設計）
+
+還沒有實作，排在 [`work_plan.md`](work_plan.md) 第 3 節。由簡單到複雜分成 4 層（表裡的 A、B、C 是 2026-11-01 比較過的方案，見 [`lessons_learned.md`](lessons_learned.md) 1.2：A 逐格精靈圖、B 單張立繪加程式動畫、C 部件拆分）。第 1 層需要的頭頂掛點，工具已經寫進 `characters.js`；其他層等要做時再擴充格式：
 
 | 層級 | 例子 | 做法 | 限制 |
 |---|---|---|---|
@@ -160,63 +160,3 @@ tools/work/sprites/<id>/      # 預覽與報告（不進 git）
 * 繪製順序：背後配件（披風、翅膀）→ 角色本體 → 頭部配件 → 手持配件 → 狀態效果（護盾、加速的圓圈，已有）。
 * 擁有與穿戴中的外觀屬於永久資料 `profile`，要提高 `SAVE_VERSION` 並在 `parseSave()` 加舊版轉換。
 * 架構文件 6 節建議鑽石之後只用於外觀，配件剛好可以接上；價格與取得方式屬於設計決策，要先確認。
-
-## 6. Gemini 生圖規範
-
-> 2026-11-12：本節已由 [`art_guide.md`](art_guide.md) 取代，以下只留作紀錄。主要的差異：描邊從「細」改成「粗」、不再用 `chibi`、待機與跑步分成兩張圖、增加不要發光與封閉小洞等規則。
-
-固定的步驟，每一步都用上一步的圖當參考，角色才會一致：
-
-1. **概念圖**（正面，確認造型）：自由發揮。
-2. **側面站姿**（之後所有圖的參考）：面向右、全身、純色背景。這張也可以直接當方案 B 的角色。
-3. **精靈圖**：附上第 2 步的圖（和 `template` 產生的版面圖），要求 idle 4 格 + run 4 格。
-4. **（之後）造型變化**：附上第 2、3 步的圖，只改服裝。
-
-每張圖都要遵守：
-
-* **畫風**：平滑的 2D 卡通插畫、Q 版比例、外圍有一圈深色細描邊，不要像素風。描邊讓去背的邊緣乾淨，角色在任何顏色的地板上都看得清楚。
-* **純色背景，不要透明**：用純綠 `#00FF00`；角色本身有綠色時改用洋紅 `#FF00FF`。不要格線、地面陰影、文字、外框。
-* 全身、側面、面向右；每格角色大小相同、腳底在同一條線上、格子之間留空。
-* 一次只改一件事（只改姿勢，或只改服裝），不要同時改。
-
-精靈圖的提示詞範本（英文對圖片模型比較穩定；實際試過有效的版本回寫到這裡）：
-
-```
-Use the attached character as the exact reference (same face, hair, outfit, colors, proportions).
-Create a 2D game sprite sheet: 4 columns x 2 rows, side view, character facing right, full body.
-Style: clean smooth 2D cartoon illustration, chibi proportions, thin dark outline. Not pixel art.
-Row 1: idle loop, 4 frames, subtle breathing, feet do not move.
-Row 2: run loop, 4 frames, frame 4 connects smoothly back to frame 1.
-Same character size in every frame, feet on the same baseline, clear empty space between frames.
-Solid flat #00FF00 background. No grid, no shadow, no text, no borders.
-```
-
-Gemini 的已知限制，流程上要預期：循環動作常常不連貫、會偷改服裝細節、不一定照版面排。工具能修正位置、大小、背景，**修不了動作本身**，所以每張 sheet 都要看工具產生的預覽 GIF 再決定要不要用；不行就重畫，或退回方案 B。
-
-## 7. 遊戲端的改動（第 1 階段，2026-11-01 完成）
-
-* `index.html`：在 `script.js` 之前載入 `js/characters.js`。
-* `script.js`：
-    * 第 2 段：刪除 `gameConfig` 的格子大小與 `animations`，改讀 `CHARACTERS.knight`；玩家方塊改用固定常數 `PLAYER_WIDTH`、`PLAYER_HEIGHT`（`getPlayerHitbox()`、`getPlayerTile()`、`applyKnockback()`、出生位置、邊界檢查）。
-    * 第 4 段：刪除執行期去背，只載入圖片。
-    * 繪製：以 `anchor` 對齊玩家方塊底部中心，開啟平滑處理（第 3 節）。之後的程式動畫、配件也加在這裡。
-* `Pal_test.png` 已複製到 `reference/characters/knight/` 當騎士的原圖，並從 `public/` 刪除（維護者 commit 時一起提交這個刪除）。
-    * 它仍留在 git 歷史裡（2 MB）。要從歷史清掉得改寫歷史、所有 clone 都要重新下載，2 MB 不值得；重點是之後的大型原圖都放 `reference/`。
-* 新增 `tools/browser/character.spec.js`（`npm --prefix tools run test:character`）：所有角色圖都存在、玩家的精靈圖大小符合設定、碰撞範圍不變。
-* `AGENTS.md` 與架構文件（2.1、5.2、9.6）已同步更新。驗證結果見架構文件 9.6。
-
-## 8. 分階段
-
-1. **（2026-11-01 完成）工具 + 騎士轉換**：`tools/sprites.py`，把 `Pal_test.png` 當第一個角色的原圖跑一次，維持原本的 8 格；遊戲改讀新格式。畫面幾乎不變，但沒有白邊與晃動，`public/` 從 2,488 KB 降到 411 KB。
-2. **（2026-11-13 完成）第一個 Gemini 新角色（`cleric` 牧師）**：照 [`art_guide.md`](art_guide.md) 畫出基準立繪 `cleric_base_v08.png`、待機動畫 `cleric_idle_v01.png`、跑步動畫 `cleric_run_v04.png`，並由 `tools/sprites.py` 轉出 `public/characters/cleric.png`（512×256，全彩 74.1 KB，待機晃動 `0.0px`、跑步晃動 `0.5px`）與 `public/js/characters.js`。有效的提示詞與實測經驗已回寫到 `art_guide.md` 第 4.4、5.2、6.4、6.8、6.10 與 11.2 節。
-3. **選角色**：要有選擇角色的介面（開始畫面或商店），屬於設計決策。目前 `public/script.js` 預設仍為 `CHARACTERS.knight`。
-4. **配件**：掛點 + 配件道具，接上鑽石或成就獎勵。
-5. （之後）換色、整套造型。
-
-## 9. 決定事項（2026-11-01 維護者決定，2026-11-13 更新）
-
-1. **畫風：平滑插畫（6～7 頭身成熟動漫奇幻比例，等級 D）**。工具只做高品質縮小，不做像素風處理；遊戲畫角色時開啟平滑處理；提示詞指定插畫風。
-2. **Python：用系統 Python 已安裝的 Pillow 12.3.0**，不建 venv、不另外安裝。
-3. **原圖放 Google Drive `Antigravity_Data/cherylgame/reference/`，不進 git**（已加入 `.gitignore`），repo 盡量維持輕量。角色設定檔進 git（第 4 節）。
-4. **騎士維持現在的 8 格**，且在選角色介面完成前維持為預設角色。
-5. 選角色、配件是否接鑽石與價格：之後再討論（照 `AGENTS.md` 屬於設計決策）。

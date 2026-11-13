@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 from tools import config, sprites
 
@@ -15,6 +18,15 @@ GREEN = (0, 255, 0)
 COLS, ROWS = 3, 2
 CELL_W, CELL_H = 200, 240
 JITTER = (0, 9, -7, 4, -10, 6)  # 每格角色的水平位置不同，腳底高度也跟著差 1/3
+
+
+def draw_figure(draw: ImageDraw.ImageDraw, cx: int, feet: int, s: int, sword: int = 40) -> None:
+    """畫一個有深色描邊的角色：白色身體、膚色的頭、往右伸到 sword 的灰色劍。(cx, feet) 是腳底中心，
+    s 是放大倍率 (s = 1 時角色 160px 高)。"""
+    outline = (20, 20, 20)
+    draw.rounded_rectangle([cx - 30 * s, feet - 110 * s, cx + 30 * s, feet], radius=10 * s, fill="white", outline=outline, width=4 * s)
+    draw.ellipse([cx - 25 * s, feet - 160 * s, cx + 25 * s, feet - 110 * s], fill=(240, 190, 150), outline=outline, width=4 * s)
+    draw.rectangle([cx + 28 * s, feet - 70 * s, cx + sword * s, feet - 62 * s], fill=(150, 150, 160), outline=outline, width=2 * s)
 
 
 def make_source(bg: tuple[int, int, int] = GREEN) -> Image.Image:
@@ -28,13 +40,18 @@ def make_source(bg: tuple[int, int, int] = GREEN) -> Image.Image:
         col, row = i % COLS, i // COLS
         cx = (col * CELL_W + CELL_W // 2 + dx) * s
         feet = (row * CELL_H + 210 + dx // 3) * s
-        outline = (20, 20, 20)
-        draw.rounded_rectangle([cx - 30 * s, feet - 110 * s, cx + 30 * s, feet], radius=10 * s, fill="white", outline=outline, width=4 * s)
-        draw.ellipse([cx - 25 * s, feet - 160 * s, cx + 25 * s, feet - 110 * s], fill=(240, 190, 150), outline=outline, width=4 * s)
-        draw.rectangle([cx + 28 * s, feet - 70 * s, cx + (40 + 6 * i) * s, feet - 62 * s], fill=(150, 150, 160), outline=outline, width=2 * s)
+        draw_figure(draw, cx, feet, s, 40 + 6 * i)
     image = big.resize((COLS * CELL_W, ROWS * CELL_H), Image.Resampling.LANCZOS)
     ImageDraw.Draw(image).rectangle([5, 5, 7, 7], fill=(90, 90, 90))
     return image
+
+
+def make_base(bg: tuple[int, int, int] = GREEN) -> Image.Image:
+    """合成的全身圖原圖：一個 800px 高的角色站在 900×1000 的純色背景中央。先畫 2 倍大再縮小，然後整張稍微模糊：
+    背景色滲進輪廓好幾個像素，模擬生圖模型的柔邊與 JPEG 壓縮。"""
+    big = Image.new("RGB", (1800, 2000), bg)
+    draw_figure(ImageDraw.Draw(big), 900, 1800, 10)
+    return big.resize((900, 1000), Image.Resampling.LANCZOS).filter(ImageFilter.GaussianBlur(2))
 
 
 class WorkDirTestCase(unittest.TestCase):
@@ -174,6 +191,192 @@ class BuildCharacterTest(WorkDirTestCase):
         self.assertEqual(run_bbox[3] - run_bbox[1], 96)
 
 
+# 全身圖直接用精靈圖原圖的第 1 格 (角色很小，會被放大)：不用另外合成、處理一張大的基準立繪，測試比較快
+FULL_SETTINGS = {**SETTINGS, "fullBody": {"source": "sheet.png"}}
+
+
+class FullBodyTest(WorkDirTestCase):
+    def test_base_portrait_centered_on_background(self) -> None:
+        self.add_character("hero", {**SETTINGS, "fullBody": {"source": "base.png"}}, make_source())
+        make_base().save(self.reference_dir / "characters" / "hero" / "base.png")
+        built = self.build("hero")
+        width, height = sprites.FULL_BODY_SIZE
+        self.assertEqual((built.full_body.mode, built.full_body.size), ("RGB", (width, height)))
+        self.assertEqual(built.entry["fullBody"], {"image": "characters/hero_full.jpg", "width": width, "height": height})
+        self.assertEqual(built.warnings, [])
+        # 角色的範圍：跟只有底色的圖不一樣的地方
+        background = sprites._full_body_background(sprites.FULL_BODY_DEFAULTS["background"])
+        left, top, right, bottom = ImageChops.difference(built.full_body, background).getbbox()
+        margin = round(height * sprites.FULL_BODY_MARGIN)
+        self.assertAlmostEqual(bottom, height - margin, delta=1)
+        self.assertAlmostEqual(top, margin, delta=1)
+        self.assertAlmostEqual((left + right) / 2, width / 2, delta=1)
+        # 底色：中央是第 1 個顏色、角落是第 2 個；角色身上與邊緣沒有殘留的綠色
+        self.assertEqual(background.getpixel((width // 2, height // 2)), (255, 248, 220))
+        self.assertEqual(background.getpixel((0, 0)), (230, 201, 146))
+        data = built.full_body.tobytes()
+        greenish = [tuple(data[i:i + 3]) for i in range(0, len(data), 3) if data[i + 1] - max(data[i], data[i + 2]) > 10]
+        self.assertEqual(greenish, [])
+
+    def test_single_background_color(self) -> None:
+        self.add_character("hero", {**SETTINGS, "fullBody": {"source": "sheet.png", "background": "#3D4F73"}}, make_source())
+        full_body = self.build("hero").full_body
+        self.assertEqual(full_body.getpixel((0, 0)), (61, 79, 115))
+        self.assertEqual(full_body.getpixel((sprites.FULL_BODY_SIZE[0] - 1, 300)), (61, 79, 115))
+
+    def test_warns_about_several_figures_and_small_source(self) -> None:
+        self.add_character("hero", FULL_SETTINGS, make_source())
+        built = self.build("hero")
+        self.assertEqual(built.full_body.size, sprites.FULL_BODY_SIZE)
+        self.assertEqual(len(built.warnings), 2)
+        self.assertIn("切出 6 格", built.warnings[0])
+        self.assertIn("放大", built.warnings[1])
+
+    def test_edges_cleaned_on_magenta_background(self) -> None:
+        magenta = (255, 0, 255)
+        source = make_base(magenta)
+        self.add_character("hero", {**SETTINGS, "fullBody": {"source": "base.png"}}, make_source(magenta))
+        source.save(self.reference_dir / "characters" / "hero" / "base.png")
+        data = self.build("hero").full_body.tobytes()
+        pinkish = [tuple(data[i:i + 3]) for i in range(0, len(data), 3) if min(data[i], data[i + 2]) - data[i + 1] > 10]
+        self.assertEqual(pinkish, [])
+
+    def test_neutral_background_left_alone(self) -> None:
+        rgb = Image.new("RGB", (40, 60), (200, 200, 200))
+        ImageDraw.Draw(rgb).rectangle([10, 10, 29, 49], fill=(40, 160, 60))  # 綠色的角色、灰色的背景
+        alpha = Image.new("L", (40, 60), 0)
+        ImageDraw.Draw(alpha).rectangle([10, 10, 29, 49], fill=255)
+        figure = sprites.clean_edges(rgb, alpha, (200, 200, 200))
+        self.assertEqual(figure.size, (20, 40))
+        self.assertEqual(figure.getpixel((0, 0)), (40, 160, 60, 255))
+
+    def test_without_full_body(self) -> None:
+        self.add_character("hero", SETTINGS, make_source())
+        built = self.build("hero")
+        self.assertIsNone(built.full_body)
+        self.assertNotIn("fullBody", built.entry)
+        self.assertIn("沒有", built.report[-1])
+
+    def test_missing_full_body_source(self) -> None:
+        self.add_character("hero", {**SETTINGS, "fullBody": {"source": "base.png"}}, make_source())
+        with self.assertRaises(sprites.MissingSource):
+            self.build("hero")
+
+    def test_same_picture_ignores_tiny_differences_only(self) -> None:
+        figure = Image.new("RGBA", (120, 300), (200, 40, 40, 255))
+        picture, _ = sprites.compose_full_body(figure, "#3D4F73")
+        self.assertTrue(sprites.same_picture(picture, picture))
+        # 每個像素都差一點點 (不同作業系統的縮放、壓縮誤差)
+        self.assertTrue(sprites.same_picture(picture, ImageChops.add(picture, Image.new("RGB", picture.size, (5, 5, 5)))))
+        # 角色移動 2px、大小不同
+        self.assertFalse(sprites.same_picture(picture, ImageChops.offset(picture, 2, 0)))
+        self.assertFalse(sprites.same_picture(picture, picture.resize((256, 384))))
+
+
+class BuildAndCheckTest(WorkDirTestCase):
+    """build() 與 check() 寫入、檢查的是 public/：把 public/、tools/work/ 與設定檔、原圖的位置都換成暫存資料夾。"""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.public_dir = self.dir / "public"
+        (self.public_dir / "js").mkdir(parents=True)
+        build_character = sprites.build_character
+        for target, name, value in (
+            (config, "PUBLIC_DIR", self.public_dir),
+            (config, "WORK_DIR", self.dir / "work"),
+            (sprites, "all_character_ids", lambda: sorted(p.stem for p in self.characters_dir.glob("*.json"))),
+            (sprites, "build_character", lambda char_id, **options: build_character(
+                char_id, self.characters_dir, self.reference_dir, **options)),
+        ):
+            patcher = mock.patch.object(target, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def run_quietly(self, command, *args) -> tuple[int, str]:
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            code = command(*args)
+        return code, output.getvalue()
+
+    def test_build_writes_full_body_and_check_passes(self) -> None:
+        self.add_character("hero", FULL_SETTINGS, make_source())
+        self.add_character("plain", SETTINGS, make_source())
+        code, _ = self.run_quietly(sprites.build, ["hero", "plain"], True)
+        self.assertEqual(code, 0)
+
+        full_path = self.public_dir / "characters" / "hero_full.jpg"
+        with Image.open(full_path) as image:
+            self.assertEqual((image.format, image.size), ("JPEG", sprites.FULL_BODY_SIZE))
+        self.assertFalse((self.public_dir / "characters" / "plain_full.jpg").exists())
+        entries = sprites.read_manifest(self.public_dir / "js" / "characters.js")
+        self.assertEqual(entries["hero"]["fullBody"]["image"], "characters/hero_full.jpg")
+        self.assertNotIn("fullBody", entries["plain"])
+        self.assertEqual(self.run_quietly(sprites.check, ["hero", "plain"], True)[0], 0)
+
+    def test_check_reports_changed_missing_and_leftover_full_body(self) -> None:
+        self.add_character("hero", FULL_SETTINGS, make_source())
+        self.run_quietly(sprites.build, ["hero"], True)
+        full_path = self.public_dir / "characters" / "hero_full.jpg"
+
+        # 底色換掉：characters.js 的設定不變，只有圖不同
+        self.add_character("hero", {**SETTINGS, "fullBody": {"source": "sheet.png", "background": "#3D4F73"}})
+        code, output = self.run_quietly(sprites.check, ["hero"], True)
+        self.assertEqual(code, 1)
+        self.assertIn("hero_full.jpg 跟重新處理的結果不同", output)
+
+        # 設定檔拿掉 fullBody，圖還留著
+        self.add_character("hero", SETTINGS)
+        code, output = self.run_quietly(sprites.check, ["hero"], True)
+        self.assertEqual(code, 1)
+        self.assertIn("設定檔沒有 fullBody", output)
+
+        # 圖被刪掉
+        self.add_character("hero", FULL_SETTINGS)
+        full_path.unlink()
+        code, output = self.run_quietly(sprites.check, ["hero"], True)
+        self.assertEqual(code, 1)
+        self.assertIn("缺少", output)
+
+    def test_full_body_only_leaves_sprite_sheet_alone(self) -> None:
+        self.add_character("hero", SETTINGS, make_source())
+        self.run_quietly(sprites.build, ["hero"], True)
+        sheet_path = self.public_dir / "characters" / "hero.png"
+        sheet_before = sheet_path.read_bytes()
+        entry_before = sprites.read_manifest(self.public_dir / "js" / "characters.js")["hero"]
+
+        # 只有全身圖的原圖：精靈圖的原圖 sheet.png 不在
+        (self.reference_dir / "characters" / "hero" / "sheet.png").unlink()
+        make_base().save(self.reference_dir / "characters" / "hero" / "full.png")
+        self.add_character("hero", {**SETTINGS, "fullBody": {"source": "full.png"}})
+        code, output = self.run_quietly(sprites.build, ["hero"], False, True)
+        self.assertEqual(code, 0, output)
+        self.assertTrue((self.public_dir / "characters" / "hero_full.jpg").is_file())
+        self.assertEqual(sheet_path.read_bytes(), sheet_before)
+        entry = sprites.read_manifest(self.public_dir / "js" / "characters.js")["hero"]
+        self.assertEqual(entry, {**entry_before, "fullBody": {"image": "characters/hero_full.jpg", "width": 512, "height": 768}})
+        self.assertEqual(list(entry)[-1], "fullBody")  # 跟重建整個角色時的欄位順序相同
+
+    def test_full_body_only_needs_config_and_existing_character(self) -> None:
+        self.add_character("hero", SETTINGS, make_source())
+        self.run_quietly(sprites.build, ["hero"], True)
+        code, output = self.run_quietly(sprites.build, ["hero"], False, True)
+        self.assertEqual(code, 1)
+        self.assertIn("設定檔沒有 fullBody", output)
+        self.add_character("newcomer", FULL_SETTINGS, make_source())
+        code, output = self.run_quietly(sprites.build, ["newcomer"], False, True)
+        self.assertEqual(code, 1)
+        self.assertIn("先重建整個角色", output)
+        self.assertFalse((self.public_dir / "characters" / "newcomer_full.jpg").exists())
+
+    def test_check_reports_full_body_without_config(self) -> None:
+        self.add_character("hero", SETTINGS, make_source())
+        self.run_quietly(sprites.build, ["hero"], True)
+        Image.new("RGB", (8, 8)).save(self.public_dir / "characters" / "ghost_full.jpg")
+        code, output = self.run_quietly(sprites.check, ["hero"], True)
+        self.assertEqual(code, 1)
+        self.assertIn("ghost_full.jpg 沒有設定檔", output)
+
+
 class ConfigTest(unittest.TestCase):
     def test_defaults_filled_in(self) -> None:
         cfg = sprites.validate_config(SETTINGS, "test")
@@ -191,6 +394,22 @@ class ConfigTest(unittest.TestCase):
     def test_bad_offset_rejected(self) -> None:
         with self.assertRaisesRegex(sprites.BuildError, "offsets.idle"):
             sprites.validate_config({**SETTINGS, "offsets": {"idle": {"5": [1, 0]}}}, "test")
+
+    def test_full_body_defaults_filled_in(self) -> None:
+        self.assertIsNone(sprites.validate_config(SETTINGS, "test")["fullBody"])
+        cfg = sprites.validate_config({**SETTINGS, "fullBody": {"source": "base.png"}}, "test")
+        self.assertEqual(cfg["fullBody"], {"source": "base.png", "background": ["#FFF8DC", "#E6C992"]})
+
+    def test_bad_full_body_rejected(self) -> None:
+        for full_body, message in (
+            ("base.png", "fullBody 要是"),
+            ({}, "fullBody 缺少 source"),
+            ({"source": "base.png", "bakground": "#FFFFFF"}, "bakground"),
+            ({"source": "base.png", "background": "white"}, "fullBody.background"),
+            ({"source": "base.png", "background": ["#FFFFFF", "#000000", "#FF0000"]}, "fullBody.background"),
+        ):
+            with self.subTest(full_body=full_body), self.assertRaisesRegex(sprites.BuildError, message):
+                sprites.validate_config({**SETTINGS, "fullBody": full_body}, "test")
 
 
 class ManifestTest(WorkDirTestCase):
