@@ -91,6 +91,13 @@ class KeyBackgroundTest(unittest.TestCase):
     def test_speck_removed(self) -> None:
         self.assertEqual(self.keyed.getpixel((6, 6))[3], 0)
 
+    def test_enclosed_chroma_hole_removed(self) -> None:
+        im = make_source()
+        cx, cy = CELL_W // 2, 210 - 55
+        ImageDraw.Draw(im).rectangle([cx - 5, cy - 5, cx + 5, cy + 5], fill=GREEN)
+        keyed = sprites.key_background(im, 40)
+        self.assertEqual(keyed.getpixel((cx, cy))[3], 0)
+
 
 class FindFramesTest(unittest.TestCase):
     def test_frames_in_reading_order(self) -> None:
@@ -143,6 +150,28 @@ class BuildCharacterTest(WorkDirTestCase):
         self.add_character("hero", SETTINGS)
         with self.assertRaises(sprites.MissingSource):
             self.build("hero")
+
+    def test_separate_sources_scaled_independently(self) -> None:
+        idle_src = make_source()
+        run_src = make_source().resize((COLS * CELL_W // 2, ROWS * CELL_H // 2), Image.Resampling.LANCZOS)
+        # 底部邊緣加上 1px 壓縮雜訊線，確認 find_frames 不會當成一格
+        ImageDraw.Draw(run_src).line([(0, run_src.height - 1), (run_src.width - 1, run_src.height - 1)], fill=(110, 254, 110))
+        settings = {
+            "name": "雙原圖",
+            "source": "idle.png",
+            "animations": {
+                "idle": {"source": "idle.png", "frames": [0, 1, 2], "fps": 6},
+                "run": {"source": "run.png", "frames": [0, 1, 2], "fps": 8},
+            },
+        }
+        self.add_character("dual", settings, idle_src)
+        run_src.save(self.reference_dir / "characters" / "dual" / "run.png")
+        built = self.build("dual")
+        self.assertEqual(built.warnings, [])
+        idle_bbox = built.cells["idle"][0].getchannel("A").getbbox()
+        run_bbox = built.cells["run"][0].getchannel("A").getbbox()
+        self.assertEqual(idle_bbox[3] - idle_bbox[1], 96)
+        self.assertEqual(run_bbox[3] - run_bbox[1], 96)
 
 
 class ConfigTest(unittest.TestCase):

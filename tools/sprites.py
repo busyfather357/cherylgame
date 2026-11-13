@@ -164,9 +164,10 @@ def background_color(im: Image.Image) -> tuple[int, int, int]:
 
 def key_background(im: Image.Image, tolerance: int) -> Image.Image:
     """去背，回傳 RGBA (背景的 alpha 為 0)：
-    1. 從四邊 flood fill：只去掉跟外面相連、顏色接近背景的像素，角色內部的白色 (眼白、白衣) 保留。
+    1. 綠幕、洋紅等鮮豔背景：整張圖顏色接近背景的像素都設為透明 (包含手臂與身體圍出的封閉小洞)；
+       淺灰、白色等中性背景則只從四邊 flood fill，保留角色內部的眼白與白衣。
     2. 去掉兩圈跟背景混色的反鋸齒邊。
-    3. 綠幕這類鮮豔的背景：邊緣三圈去掉背景色的溢色 (despill)。頭與身體交接的凹角，溢色會滲到第 3 圈。
+    3. 鮮豔背景的邊緣三圈去掉背景色的溢色 (despill)。頭與身體交接的凹角，溢色會滲到第 3 圈。
     4. 去掉面積很小的雜點 (格線殘留等)。
     """
     im = im.convert("RGBA")
@@ -180,24 +181,30 @@ def key_background(im: Image.Image, tolerance: int) -> Image.Image:
 
     alpha = bytearray(b"\xff") * (w * h)
     seen = bytearray(w * h)
-    queue = deque(list(range(w)) + list(range(w * (h - 1), w * h)) + [y * w for y in range(h)] + [y * w + w - 1 for y in range(h)])
-    while queue:
-        i = queue.popleft()
-        if seen[i]:
-            continue
-        seen[i] = 1
-        if distance(i) > tolerance:
-            continue
-        alpha[i] = 0
-        x = i % w
-        if x > 0:
-            queue.append(i - 1)
-        if x < w - 1:
-            queue.append(i + 1)
-        if i >= w:
-            queue.append(i - w)
-        if i < w * (h - 1):
-            queue.append(i + w)
+    is_chroma = max(bg) - min(bg) > 100
+    if is_chroma:
+        for i in range(w * h):
+            if distance(i) <= tolerance:
+                alpha[i] = 0
+    else:
+        queue = deque(list(range(w)) + list(range(w * (h - 1), w * h)) + [y * w for y in range(h)] + [y * w + w - 1 for y in range(h)])
+        while queue:
+            i = queue.popleft()
+            if seen[i]:
+                continue
+            seen[i] = 1
+            if distance(i) > tolerance:
+                continue
+            alpha[i] = 0
+            x = i % w
+            if x > 0:
+                queue.append(i - 1)
+            if x < w - 1:
+                queue.append(i + 1)
+            if i >= w:
+                queue.append(i - w)
+            if i < w * (h - 1):
+                queue.append(i + w)
 
     for _ in range(2):
         for i in _edge_indices(alpha, w, h, 1):
@@ -263,10 +270,14 @@ def find_frames(keyed: Image.Image) -> list[Frame]:
     frames = []
     for top, bottom in _bands(row_counts, ROW_GAP):
         bh = bottom - top
+        if bh <= 2:
+            continue
         columns = alpha.crop((0, top, w, bottom)).transpose(Image.Transpose.TRANSPOSE).tobytes()  # 轉置後每一列是原圖的一欄
         col_counts = [bh - columns[x * bh:(x + 1) * bh].count(0) for x in range(w)]
         for left, right in _bands(col_counts, COL_GAP):
             l, t, r, b = alpha.crop((left, top, right, bottom)).getbbox()
+            if r - l <= 2 or b - t <= 2:
+                continue
             box = (left + l, top + t, left + r, top + b)
             frames.append(Frame(box, keyed.crop(box)))
     return frames
@@ -339,18 +350,24 @@ def build_character(char_id: str, characters_dir: Path = config.CHARACTERS_DIR,
         return sources[name]
 
     picked: dict[str, list[Frame]] = {}
+    source_scales: dict[str, float] = {}
     for name, anim in cfg["animations"].items():
-        frames = frames_of(anim.get("source", cfg["source"]))
+        src_name = anim.get("source", cfg["source"])
+        frames = frames_of(src_name)
         for i in anim["frames"]:
             if i >= len(frames):
                 raise BuildError(f"{char_id}：{name} 用到第 {i} 格，但原圖只切出 {len(frames)} 格 (0～{len(frames) - 1})")
         picked[name] = [frames[i] for i in anim["frames"]]
+        if src_name not in source_scales:
+            source_scales[src_name] = cfg["charHeight"] / picked[name][0].image.height
 
-    cell, scale = cfg["cell"], cfg["charHeight"] / picked["idle"][0].image.height
+    cell = cfg["cell"]
     anchor = (cell // 2, cell - cfg["padding"])
     cells: dict[str, list[Image.Image]] = {}
     heads: dict[str, list[list[int]]] = {}
     for name, frames in picked.items():
+        src_name = cfg["animations"][name].get("source", cfg["source"])
+        scale = source_scales[src_name]
         offsets = cfg["offsets"].get(name, {})
         cells[name], heads[name] = [], []
         for n, frame in enumerate(frames):
@@ -386,7 +403,8 @@ def build_character(char_id: str, characters_dir: Path = config.CHARACTERS_DIR,
     }
 
     on_screen = cfg["drawScale"]
-    report.append(f"縮放倍率 {scale:.4f}；角色在畫面上約 {cfg['charHeight'] * on_screen:.0f}px 高；每格 {cell}×{cell}，畫面上 {cell * on_screen:.0f}px")
+    scale_text = "、".join(f"{s:.4f}" for s in source_scales.values())
+    report.append(f"縮放倍率 {scale_text}；角色在畫面上約 {cfg['charHeight'] * on_screen:.0f}px 高；每格 {cell}×{cell}，畫面上 {cell * on_screen:.0f}px")
     for name, points in heads.items():
         xs = [p[0] for p in points]
         report.append(f"{name}：{len(points)} 格，{cfg['animations'][name]['fps']} fps，頭部水平晃動 {(max(xs) - min(xs)) * on_screen:.1f}px (畫面上)")
