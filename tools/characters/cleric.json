@@ -5,5 +5,5 @@
         "idle": { "source": "cleric_idle_v01.png", "frames": [0, 1, 2, 3], "fps": 6 },
         "run":  { "source": "cleric_run_v04.png", "frames": [0, 1, 2, 3], "fps": 8 }
     },
-    "fullBody": { "source": "cleric_full_v01.png" }
+    "fullBody": { "source": "cleric_base_v08.png" }
 }

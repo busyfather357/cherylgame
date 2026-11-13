@@ -27,7 +27,8 @@
 | 2026-11-13 | 全身圖只縮小 3 倍，精靈圖用的去背會留下看得到的綠邊 | `character_pipeline.md` 4.2 第 10 步；`art_guide.md` 6.11 |
 | 2026-11-13 | JPEG 沒有透明，全身圖的底色只能做進圖裡 | `character_pipeline.md` 3.1 |
 | 2026-11-13 | 雲端的 Claude Code 照「不改 git 狀態」的規則做，變更出不了暫時的容器 | `AGENTS.md`「執行環境」「Git 與 PR 流程」；`CLAUDE.md` |
-| 2026-11-13 | 雲端環境讀不到 Drive 上的原圖，只拿得到維護者在對話中附上的圖 | `python -m tools.sprites --full-body`；`AGENTS.md`「Git 與 PR 流程」的「合併後維護者要做的事」 |
+| 2026-11-13 | 雲端環境讀不到 Drive 上的原圖，只拿得到維護者在對話中附上的圖 | `python -m tools.sprites --full-body`；`character_pipeline.md` 第 1 節 |
+| 2026-11-13 | 維護者在對話中附上的圖，通常是 Drive 上已經核可的定稿，不是新的原圖；沒問清楚就會多出不存在的檔名與步驟 | `AGENTS.md`「美術素材」；`character_pipeline.md` 第 1 節 |
 | 2026-11-13 | 同一份原圖在不同作業系統重建，結果可能差幾個像素，`--check` 會誤報 | 全身圖用容許誤差比較（`character_pipeline.md` 4.2）；精靈圖尚未處理（[`work_plan.md`](work_plan.md) 第 4 節） |
 
 ## 1. 美術素材與角色圖
@@ -143,9 +144,9 @@
     * **忽略 1～2px 邊緣壓縮雜訊線**：JPEG 轉檔偶爾在畫布最下緣留下 1px 雜訊線，`find_frames` 自動略過寬或高 ≤ 2px 的細線。
     * **不同原圖獨立計算縮放倍率**：`idle`（高 523px）與 `run`（高 407px）來自兩張不同原圖時，各自以該張原圖的第 1 格計算縮放倍率，確保打包進 `public/characters/cleric.png`（512×256，全彩 74.1 KB）時待機與跑步在畫面上都是 48px 高。
 
-### 1.7 2026-11-13：牧師的全身圖（`cleric_full_v01`）
+### 1.7 2026-11-13：牧師的全身圖
 
-維護者決定每個角色除了精靈圖，還要有一張給選角色介面與角色面板顯示的全身圖（JPEG），並直接提供牧師的圖：1792×2400 的 JPEG，正面 3/4 視角，法杖比人高。轉存成 `cleric_full_v01.png` 後以 `tools/sprites.py` 處理：
+維護者決定每個角色除了精靈圖，還要有一張給選角色介面與角色面板顯示的全身圖（JPEG）。全身圖直接從核可的定稿圖轉出來，不另外畫。做這件事的雲端環境讀不到 Drive，維護者在對話中把牧師的定稿圖重新傳了一次（1792×2400 的 JPEG；正面 3/4 視角，法杖比人高），轉存成 PNG 後以 `tools/sprites.py` 處理：
 
 | 項目 | 結果 |
 |---|---|
@@ -155,12 +156,15 @@
 | 加上全身圖專用的去邊之後 | 偏綠的像素 0 個；角色 911×2088，縮放倍率 0.3238 |
 | 成品 | `public/characters/cleric_full.jpg`，512×768，53.4 KB |
 
-6.11 節的規則是從這張圖與工具的處理方式整理出來的。騎士的全身圖等維護者重畫。
+`art_guide.md` 6.11 與 `character_pipeline.md` 4.2 的第 10 步是從這次的結果整理出來的。騎士的全身圖等維護者重畫。一開始把這張圖誤認成另外畫的新圖，經過見 6.2。
 
 ### 1.8 2026-11-13：檢視牧師的產出時發現、還沒處理的事
 
 * **精靈圖還有少量綠色殘留**：`public/characters/cleric.png` 有 10 個明顯偏綠的像素（綠色比紅、藍高出 40 以上），分散在待機第 1～3 格與跑步第 2、4 格，位置在靴子附近；放大到 4 倍看得到一個綠點，遊戲裡的大小（48 像素高）幾乎看不出來。`art_guide.md` 記的「殘留綠色像素 = 0」是基準立繪的檢查結果，不是打包後的精靈圖。待辦在 [`work_plan.md`](work_plan.md) 2.2。
-* **`art_guide.md` 6.10 的範例提示詞跟實際的牧師不一樣**：範例寫的是栗色長髮、金色翼杖、天藍水晶球；實際的精靈圖與全身圖是銀灰色頭髮、木頭法杖、菱形的藍水晶、深色短靴。這個雲端環境讀不到 Drive 上的 `cleric_base_v08.png` 與 `log.md`，無法確認哪一個才是定稿的 CHARACTER 區塊。之後要畫牧師的造型變化時會用到，待辦在 `work_plan.md` 2.2。
+* **`art_guide.md` 寫的牧師跟定稿不一樣**。維護者提供的定稿圖是銀灰色頭髮、木頭法杖、菱形的藍水晶、深色短靴，正面 3/4 視角，法杖比人高；精靈圖也是這個造型。但 `art_guide.md` 6.10 的範例提示詞寫的是栗色長髮、金色翼杖、天藍水晶球、面向右，1.6 的紀錄也說定稿是「面向右、法杖低於兜帽」。這個雲端環境讀不到 Drive 上的 `log.md`，無法確認文件是哪裡沒有跟上。影響：
+    * 之後畫牧師的造型變化時，照 6.10 的文字會畫成另一個人。要以 Drive 上 `log.md` 最上面的 CHARACTER 區塊為準，並更正 6.10。
+    * 定稿的法杖高過頭頂，工具把最上緣當成頭頂，所以 `characters.js` 裡牧師的頭頂掛點 `attach.head` 其實在法杖頂端的高度。做配件（帽子等）時要處理。
+    * 待辦在 `work_plan.md` 2.2。
 
 ## 2. 存檔（`system_architecture.md` 第 4 節）
 
@@ -266,7 +270,7 @@
     * 牧師（`cleric`）：由兩張 16:9 綠幕原圖 `cleric_idle_v01.png`（1376×768）與 `cleric_run_v04.png`（1376×768）各切出 4 格，依各原圖第 1 格身高（523px 與 407px）獨立計算倍率縮至 96px 高；頭部水平晃動 idle 0.0px、run 0.5px（畫面上）；精靈圖 `public/characters/cleric.png` 512×256、全彩、74.1 KB，`--check` 一致。
     * `python -m unittest discover -s tools/tests -t .` 19 項通過（`test_sprites.py` 17 項 + `test_config.py` 2 項）：包含綠幕內部封閉孔洞自動清除（同時保留灰白背景角色內部白色）、不同原圖獨立縮放倍率、切格順序、對齊、手動偏移、設定檔檢查與 `characters.js` 的讀寫。
     * `npm --prefix tools test` 26 項通過（`character.spec.js` 自動驗證 `CHARACTERS` 內含 `cleric` 與 `knight` 的所有圖片載入與尺寸）。
-* 全身圖（2026-11-13）：牧師的 `cleric_full_v01.png`（1792×2400，背景色 `#06FD0B`）切出 1 格，去邊後角色 911×2088，縮放倍率 0.3238，`public/characters/cleric_full.jpg` 53.4 KB；去邊前有 15,673 個偏綠的像素（法杖、袖口、靴子邊緣看得到綠邊），去邊後 0 個。`python -m unittest discover -s tools/tests -t .` 36 項通過；`npm --prefix tools test` 26 項通過（`character.spec.js` 檢查全身圖載入成功、大小符合 `fullBody`）。
+* 全身圖（2026-11-13）：牧師的定稿圖（1792×2400，背景色 `#06FD0B`）切出 1 格，去邊後角色 911×2088，縮放倍率 0.3238，`public/characters/cleric_full.jpg` 53.4 KB；去邊前有 15,673 個偏綠的像素（法杖、袖口、靴子邊緣看得到綠邊），去邊後 0 個。`python -m unittest discover -s tools/tests -t .` 36 項通過；`npm --prefix tools test` 26 項通過（`character.spec.js` 檢查全身圖載入成功、大小符合 `fullBody`）。
 
 ## 6. 協作與流程
 
@@ -277,6 +281,18 @@
 * **提交被擋下兩次**。`CLAUDE.md` 寫的是「不要執行 `git add`、`git commit`、`git push`，由維護者檢查 diff 後手動 commit」，這條規則是為維護者的電腦寫的；但雲端的容器是暫時的，維護者看不到裡面的工作目錄，不推送的話變更就消失。`AGENTS.md` 的「Git」其實已經區分本機與雲端，但只舉了 Antigravity 當例子，`CLAUDE.md` 的那一句又沒有分環境。當時改用 patch 檔與附件把變更交給維護者。
     * 現在的做法：`AGENTS.md` 新增「執行環境」，把雲端的 Claude Code 明列為雲端 agent；`CLAUDE.md` 的提醒依環境分開；PR 的步驟寫在「Git 與 PR 流程」。
 * **安裝也被擋下**（`npm --prefix tools ci`，同一個原因）。那次沒有安裝，改用環境內建的 Playwright 1.63.0 與 chromium-1243 執行（`NODE_PATH` 指向內建的套件，並在暫存資料夾放一個把 `@playwright/test` 轉到 `playwright/test` 的轉接檔），26 項全部通過。版本剛好跟 `tools/package.json` 寫死的相同才能這樣做。
-* **讀不到 Drive**：雲端環境沒有 `reference/`。騎士的原圖 `Pal_test.png` 還在 git 歷史裡（`39075a1:public/Pal_test.png`），可以取回來測試工具；牧師的精靈圖原圖拿不到，所以加了 `--full-body`，只用維護者在對話中附上的全身圖原圖就能建置。附上的圖要由維護者另外放到 Drive，否則他電腦上的 `--check` 找不到原圖。
+* **讀不到 Drive**：雲端環境沒有 `reference/`。騎士的原圖 `Pal_test.png` 還在 git 歷史裡（`39075a1:public/Pal_test.png`），可以取回來測試工具；牧師的動畫原圖拿不到，所以加了 `--full-body`，只用維護者在對話中重新附上的那一張定稿就能建置。
 * **`--check` 在 Linux 上對騎士報不一致**：重建的 `knight.png` 跟 repo 裡的（在維護者的 Windows 電腦上建置）差 8 個像素（共 131,072 個），`characters.js` 的設定完全相同。原因沒有查明，推測是限制 64 色時的些微差異。那次沒有覆寫 `knight.png`。全身圖的檢查因此改成容許極小的差異；精靈圖還是逐像素比較。
 * **`tools/config.py` 的 `display_path()` 在 Linux 上判斷錯誤**：預設的 Drive 位置是 Windows 路徑（`G:\...`），在 Linux 上是相對路徑，解析後落在 repo 底下，被當成 repo 裡的檔案。`test_display_path` 因此在 Linux 上一直失敗。已改成先比對 Drive 再比對 repo。
+
+### 6.2 2026-11-13：把維護者重新傳來的定稿圖當成新的原圖
+
+* **情境**：做全身圖時，Claude Code 回報「這個雲端環境讀不到 Drive 上的牧師原圖」。維護者接著在對話中附上一張圖，說「用這張圖當參考圖」。
+* **誤會**：那張圖就是 Drive 上已經核可的牧師定稿圖，維護者只是因為 Claude Code 看不到那個資料夾，才重新傳一次。Claude Code 卻把它當成另外畫的新圖，接連做了這些多餘的事：
+    * 取了一個 Drive 上不存在的檔名 `cleric_full_v01.png`，設定檔也指向它。
+    * 在 `art_guide.md` 新增種類 `full`、「步驟 5 全身圖」，還寫了一個沒有實測過的提示詞範本。
+    * 在 PR 與工作計畫總表請維護者「把這張原圖上傳到 Drive」，並把「每個角色都要另外畫一張全身圖」排進之後的工作。
+* **原因**：沒有問那張圖是什麼、對應 Drive 上的哪一個檔案，就照自己的推測做下去。「參考圖」在這個專案指的是 `reference/` 裡的圖，被解讀成「新的參考」。
+* **更正**（同一個 PR，合併之前）：全身圖的原圖就是核可的基準立繪，不用另外畫；拿掉種類 `full`、步驟 5 與提示詞範本；設定檔的 `fullBody.source` 改成定稿的檔名。成品 `cleric_full.jpg` 沒有變（同一張圖）。
+* **現在的做法**：雲端環境收到維護者附上的圖時，先確認它是 Drive 上的哪一個檔案，還是 Drive 上還沒有的新圖；照 Drive 上的檔名放進 repo 的 `reference/`，不自己取檔名、不新增種類或步驟。寫在 `AGENTS.md`「美術素材」與 `character_pipeline.md` 第 1 節。
+* **還沒確認的事**：設定檔填的 `cleric_base_v08.png` 是文件記載的定稿檔名，Claude Code 沒有親眼看到 Drive 上的檔名。待辦在 `work_plan.md` 2.2。

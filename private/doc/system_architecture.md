@@ -93,7 +93,7 @@ cherylgame/
     * 玩家方塊固定 `PLAYER_WIDTH`×`PLAYER_HEIGHT`（50×52，跟改版前的繪製大小相同），碰撞範圍 `getPlayerHitbox()`、出生位置、擊退都以它為準，換角色不影響遊戲平衡。
     * 角色是插畫風，畫角色時開啟 `imageSmoothingEnabled`（品質 `high`），其他東西維持關閉。
     * 遊戲目前固定使用騎士（`playerCharacter = CHARACTERS.knight`），原圖是改版前的 `Pal_test.png`（2 MB，已移到 `reference/`，網站上的角色圖剩 13 KB）。牧師（`cleric`）的圖已經在 `public/characters/`，但選角色的介面還沒做，玩家還不能選。各角色的進度見 [`work_plan.md`](work_plan.md) 第 2 節。
-    * **全身圖**（2026-11-13）：每個角色另外有一張 `public/characters/<id>_full.jpg`，給選角色介面與之後的角色面板顯示（介面還沒做，遊戲目前沒有載入它）。512×768 的 JPEG，所有角色大小相同；JPEG 沒有透明，工具去背後鋪上底色（預設是題目視窗的米色）。路徑與大小在 `CHARACTERS[id].fullBody`（`image`、`width`、`height`）；還沒有全身圖的角色沒有這個欄位（目前騎士沒有，等維護者重畫）。原圖是另外畫的一張 `<id>_full_vNN.png`，姿勢與視角不用跟精靈圖一樣。細節見 [`character_pipeline.md`](character_pipeline.md) 3.1 節。
+    * **全身圖**（2026-11-13）：每個角色另外有一張 `public/characters/<id>_full.jpg`，給選角色介面與之後的角色面板顯示（介面還沒做，遊戲目前沒有載入它）。512×768 的 JPEG，所有角色大小相同；JPEG 沒有透明，工具去背後鋪上底色（預設是題目視窗的米色）。路徑與大小在 `CHARACTERS[id].fullBody`（`image`、`width`、`height`）；還沒有全身圖的角色沒有這個欄位（目前騎士沒有，等維護者重畫）。原圖就是核可的基準立繪 `<id>_base_vNN.png`，不用另外畫。細節見 [`character_pipeline.md`](character_pipeline.md) 3.1 節。
 * **Emoji 向量渲染**：將地圖物件 (🌲, 🌊, 🧱) 與敵人 (👾, 🐉, 🎁) 等 Emoji 透過 SVG 包裝並轉換為 Image 物件快取，確保在 Canvas 縮放時保持向量圖的清晰度。
 
 ### 2.2 關卡與地圖生成 (Map Generation)
@@ -592,7 +592,7 @@ cherylgame/
 * 全身圖（2026-11-13）：
     * 原圖去背後取最大的一塊當角色，等比例縮放到 512×768 的畫面裡（四周留 6%），左右置中、腳底貼齊下方的留白線，鋪上底色後存成 JPEG（品質 85、色度不抽樣、漸進式）。
     * 全身圖只縮小 2～3 倍，精靈圖用的去背留下的幾像素綠邊會看得出來，所以多一道去邊 `clean_edges()`：由外往內最多剝 8 圈還帶著背景色的像素，再對邊緣 16 圈做溢色修正。只處理綠幕、洋紅背景。
-    * `--full-body <id>` 只重建全身圖與 `characters.js` 的 `fullBody`，不讀精靈圖的原圖、不動精靈圖。雲端 agent 的環境通常只拿得到維護者在對話中附上的全身圖原圖。
+    * `--full-body <id>` 只重建全身圖與 `characters.js` 的 `fullBody`，不讀動畫的原圖、不動精靈圖。雲端 agent 的環境讀不到 Drive，通常只拿得到維護者在對話中重新附上的那一張定稿。
     * `--check` 對全身圖不是逐位元組比較：大小相同，而且色差超過 8 的像素不到千分之一就算一致（JPEG 是有損壓縮，不同作業系統的結果可能有極小的差異）。設定檔沒有 `fullBody` 但圖還在、或圖沒有對應的設定檔，也會列出來。
 * 每次轉檔與測試的實測數據：[`lessons_learned.md`](lessons_learned.md) 1.6、1.7、5.3。
 
@@ -611,5 +611,5 @@ cherylgame/
 ### 9.8 執行環境與交付（2026-11-13）
 * agent 可能在兩種環境執行：維護者的電腦（本機），或雲端的容器／VM（Google Antigravity、claude.ai/code 的 Claude Code 雲端工作階段）。能不能改 git 狀態、能不能安裝，依環境而定，規則在 `AGENTS.md` 的「執行環境」。
 * 雲端 agent 的交付方式是 PR：步驟在 `AGENTS.md` 的「Git 與 PR 流程」，PR 說明的固定段落在 `.github/pull_request_template.md`。`main` 是正式網站的來源，只有維護者合併。
-* 雲端環境讀不到 Google Drive：沒有 `reference/` 的原圖，`--check` 會略過讀不到原圖的角色。需要原圖時由維護者在對話中附上，建置後在 PR 的「合併後維護者要做的事」請維護者把那張原圖放到 Drive。
+* 雲端環境讀不到 Google Drive：沒有 `reference/` 的原圖，`--check` 會略過讀不到原圖的角色。需要原圖時由維護者在對話中附上；先確認它是 Drive 上的哪一個檔案，照那個檔名使用。確定是 Drive 上還沒有的新圖，才在 PR 的「合併後維護者要做的事」請維護者放到 Drive。
 * 為什麼需要這一節：[`lessons_learned.md`](lessons_learned.md) 6.1。

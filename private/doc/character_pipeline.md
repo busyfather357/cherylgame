@@ -25,18 +25,18 @@
 | 預覽與報告 | `tools/work/sprites/<id>/` | 否 | 工具產生 |
 
 * 工具只用 Pillow 12.3.0（系統 Python 已安裝的，不建 venv、不另外安裝），不連網。產出以這個版本為準。
-* 工具讀原圖的位置：Drive 有掛載時直接讀 Drive 的 `reference/`，否則讀 repo 裡的 `reference/`（`tools/config.py`）。雲端環境讀不到 Drive：只拿得到維護者在對話中附上的圖，放進 repo 裡的 `reference/characters/<id>/`（不進 git）再建置，並在 PR 請維護者把那張原圖放到 Drive。
+* 工具讀原圖的位置：Drive 有掛載時直接讀 Drive 的 `reference/`，否則讀 repo 裡的 `reference/`（`tools/config.py`）。雲端環境讀不到 Drive：只拿得到維護者在對話中附上的圖。**先問清楚那張圖是 Drive 上的哪一個檔案**（通常就是已經核可的定稿，維護者只是重新傳一次），照 Drive 上的檔名放進 repo 裡的 `reference/characters/<id>/`（不進 git）再建置；確定是 Drive 上還沒有的新圖時，才在 PR 請維護者放到 Drive。
 
 ## 2. 新增或更新一個角色（步驟）
 
-1. **確認原圖已經定稿**：`reference/characters/<id>/` 那一層有核可的 `<id>_idle_vNN.png`、`<id>_run_vNN.png`，以及全身圖 `<id>_full_vNN.png`（`art_guide.md` 第 3、4 節）。`<id>` 用英文小寫，定了就不要改。
+1. **確認原圖已經定稿**：`reference/characters/<id>/` 那一層有核可的 `<id>_base_vNN.png`、`<id>_idle_vNN.png`、`<id>_run_vNN.png`（`art_guide.md` 第 3、4 節）。`<id>` 用英文小寫，定了就不要改。
 2. **設定檔**：新角色複製 `tools/characters/cleric.json` 成 `tools/characters/<id>.json`，改 `name` 與各個 `source`（檔名含版本號；換定稿時檔名會變，要跟著改）。欄位說明在 `tools/sprites.py` 開頭。
     * 待機與跑步各一張原圖（`art_guide.md` 的做法）：兩個動畫各自加上 `"source"`，`frames` 都填 `[0, 1, 2, 3]`；最上層的 `source` 填待機那張。
     * 兩個動畫畫在同一張圖（4 欄 × 2 排）：`frames` 填 `[0, 1, 2, 3]`、`[4, 5, 6, 7]`。
     * 只有基準立繪、沒有動畫：`idle` 與 `run` 都用 `"frames": [0]`，角色是靜態的。
-    * 全身圖：加上 `"fullBody": { "source": "<id>_full_vNN.png" }`。
+    * 全身圖：加上 `"fullBody": { "source": "<id>_base_vNN.png" }`，原圖就是核可的基準立繪。
     * 新的插畫風角色不要設 `colors`（全彩）。洋紅背景不用另外設定，工具會自己判斷背景色。
-3. **建置**：`python -m tools.sprites <id>`。只有全身圖的原圖、沒有精靈圖原圖的環境，用 `python -m tools.sprites --full-body <id>`。
+3. **建置**：`python -m tools.sprites <id>`。只拿得到基準立繪、沒有動畫原圖的環境，用 `python -m tools.sprites --full-body <id>`。
 4. **看結果**，有問題照 4.3 調整後重建：
     * `tools/work/sprites/<id>/report.txt`：切出的格數對不對、有沒有「注意」。
     * `preview.png` 與各動畫的 GIF：有沒有綠邊、腳底是不是在同一條線、動作連不連貫、頭部晃動幾像素。
@@ -99,7 +99,7 @@ const CHARACTERS = {
         "fullBody": { "image": "characters/cleric_full.jpg", "width": 512, "height": 768 }
 ```
 
-* **原圖是另外畫的一張** `reference/characters/<id>/<id>_full_vNN.png`（[`art_guide.md`](art_guide.md) 6.11 節），不是精靈圖的某一格：精靈圖的原圖每格只有 400～500px 高，而且固定是面向右的側面；全身圖要放大給玩家看，可以用正面或 3/4 視角。
+* **原圖就是核可的基準立繪** `reference/characters/<id>/<id>_base_vNN.png`（[`art_guide.md`](art_guide.md) 6.11 節），不用另外畫，也不是精靈圖的某一格：動畫原圖每格只有 400～500px 高，基準立繪是一整張圖畫一個角色，解析度高得多。`fullBody.source` 可以指向資料夾裡的任何一張定稿，維護者之後想換一張圖當全身圖時改這裡。
 * 遊戲還沒有用到它（選角色介面排在 [`work_plan.md`](work_plan.md) 第 3 節）。CSP 的 `img-src 'self'` 已經允許；介面打開時才載入，不要在遊戲一開始就載入所有角色的全身圖。
 
 ## 4. 工具 (`tools/sprites.py`)
@@ -112,7 +112,7 @@ const CHARACTERS = {
 | `python -m tools.sprites knight` | 重建一個角色：寫入 `public/characters/knight.png`、更新 `public/js/characters.js`、產生預覽 |
 | `python -m tools.sprites --all` | 重建全部角色 |
 | `python -m tools.sprites --check` | 只檢查 `public/` 的產出是否跟原圖與設定一致，不寫檔（原圖不在本機的角色略過） |
-| `python -m tools.sprites --full-body cleric` | 只重建全身圖 `public/characters/cleric_full.jpg` 與 `characters.js` 的 `fullBody`，精靈圖不動；只需要全身圖的原圖 |
+| `python -m tools.sprites --full-body cleric` | 只重建全身圖 `public/characters/cleric_full.jpg` 與 `characters.js` 的 `fullBody`，精靈圖不動；只需要 `fullBody.source` 那一張原圖 |
 | `python -m tools.sprites template` | 產生給生圖模型參考的版面圖 `tools/work/sprites/template.png`（4 欄 × 2 排、每格有腳底基準線、純綠背景） |
 | `python -m unittest discover -s tools/tests -t .` | 工具的測試 |
 

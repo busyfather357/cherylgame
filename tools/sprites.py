@@ -10,8 +10,8 @@
 * public/characters/<id>.png：精靈圖。每格 cell×cell，每排一個動畫 (依設定檔 animations 的順序)，
   角色腳底中心固定在格子的 anchor。
 * public/characters/<id>_full.jpg：全身圖 (設定檔有 fullBody 時)，給選角色介面、角色面板顯示。
-  所有角色都是 512×768；JPEG 沒有透明，去背後鋪上底色。原圖是另外畫的一張 <id>_full_vNN.png，
-  姿勢與視角不用跟精靈圖一樣。
+  所有角色都是 512×768；JPEG 沒有透明，去背後鋪上底色。原圖就是核可的基準立繪 <id>_base_vNN.png，
+  不用另外畫一張。
 * public/js/characters.js：所有角色的設定 (全域 const CHARACTERS)，script.js 依它繪製。不要手動修改。
 * tools/work/sprites/<id>/：預覽圖 preview.png、各動畫的 GIF、報告 report.txt (不進 git)。
 
@@ -36,8 +36,8 @@
 * colors (null)：限制色數可以讓檔案小很多，但插畫的漸層會出現色帶；看預覽再決定。
 * tolerance (40)：去背時，RGB 各分量跟背景色都差在這個值以內就算背景。
 * offsets：個別格子的手動偏移 (精靈圖像素)，例如 {"run": {"2": [-2, 0]}} 把 run 第 3 格往左移 2。
-* fullBody (null)：全身圖，例如 { "source": "cleric_full_v01.png" }。source 是原圖檔名，一張圖一個角色
-  (切出不只一格時用最大的一格)；角色要有 680px 高以上，太小會被放大而模糊。
+* fullBody (null)：全身圖，例如 { "source": "cleric_base_v08.png" }。source 是原圖檔名，通常是核可的基準立繪；
+  一張圖一個角色 (切出不只一格時用最大的一格)，角色要有 680px 高以上，太小會被放大而模糊。
   background (米色)：底色，"#RRGGBB" 或 ["中央", "四角"] 兩色的放射漸層。
 
 指令 (從 repo 根目錄執行)：

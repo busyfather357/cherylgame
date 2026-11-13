@@ -16,7 +16,7 @@
 | 工作目錄 | 維護者直接看得到，會自己檢查 diff | 暫時的，工作階段結束就消失，維護者看不到 |
 | git | **不改 git 狀態**：只改檔案，由維護者 commit | **用 PR 交付**：在自己的分支 commit、push、開 PR（見「Git 與 PR 流程」） |
 | 安裝 | **不自行安裝**：把指令交給維護者 | 可以照 lock 檔安裝 `tools/` 的套件（見「開發工具」） |
-| Google Drive 的 `reference/` | 讀得到 | Antigravity 讀得到自己上傳的檔案；Claude Code 讀不到，只拿得到維護者在對話中附上的圖 |
+| Google Drive 的 `reference/` | 讀得到 | Antigravity 讀得到自己上傳的檔案；Claude Code 讀不到，需要時請維護者在對話中附上那張圖 |
 
 * 同一個 agent 在兩種環境的規則不同：Claude Code 在維護者的電腦上是本機，在 claude.ai/code 的雲端工作階段是雲端。
 * 分不出來時當成本機，並詢問維護者。
@@ -152,7 +152,7 @@ npm --prefix tools ci
 4. **Commit**：訊息是 `<類型>(<範圍>): <中文摘要>`，例如 `feat(character): 新增牧師的全身圖`；內文寫為什麼改、改了什麼。類型：`feat` 新功能、`fix` 修正、`docs` 文件、`tools` 開發工具、`art` 只有美術產出、`refactor` 不改行為的整理。工具產出的檔案（`public/characters/`、`public/js/characters.js`）跟造成它改變的設定檔放在同一個 commit。
 5. **Push** 到自己的分支。
 6. **開 PR**，base 是 `main`。標題跟 commit 訊息同一個格式；說明照 [`.github/pull_request_template.md`](.github/pull_request_template.md) 的段落填：摘要、改了什麼、驗證、合併後維護者要做的事、待決定的事。
-    * 「合併後維護者要做的事」寫 agent 做不到、但不做就不完整的事：把新的原圖放到 Google Drive、把改過的 `art_guide.md` 複製到 Drive、在實機上測試等。
+    * 「合併後維護者要做的事」寫 agent 做不到、但不做就不完整的事：把改過的 `art_guide.md` 複製到 Drive、在本機用 Drive 上的原圖執行 `--check`、在實機上測試等。
 7. **回報**：把 PR 的連結與「合併後維護者要做的事」告訴維護者。審查意見的修改 push 到同一個分支，不另外開 PR。
 8. **合併之後**的下一件工作，從最新的 `main` 重新開分支，不要接著已經合併的分支繼續做。
 
@@ -167,6 +167,7 @@ npm --prefix tools ci
 * 分工（2026-11-12 起）：**Google Antigravity 負責畫圖**（角色、背景的原圖），**Claude Code 負責程式與轉檔**（原圖 → 遊戲用的檔案）。Jules 已停用。
 * 每個角色做到哪一步、接下來要畫誰：[`private/doc/work_plan.md`](private/doc/work_plan.md) 第 2 節。美術的工作以需求單 `brief.md` 交接（`art_guide.md` 9.1），畫完或核可後更新總表。
 * 畫圖的規則、提示詞範本、資料夾與檔名、核可流程都在 [`private/doc/art_guide.md`](private/doc/art_guide.md)。這份文件要能單獨閱讀（Antigravity 讀的是 Drive 上同一個路徑的副本）；修改後提高文件開頭的規範版本，並把新版複製到 Drive。
+* **維護者在對話中附上圖時，先確認它是什麼**：通常是 Drive 上已經核可的定稿（因為 agent 讀不到 Drive 才重新傳一次），不是新的原圖。問清楚它對應 Drive 上的哪一個檔案，照那個檔名使用；不要自己取檔名，也不要因此新增素材的種類或步驟。
 * 美術 agent 生成的圖先放 `reference/<characters|backgrounds>/<id>/drafts/`，維護者核可的定稿複製到上一層 `reference/<characters|backgrounds>/<id>/`；轉檔工具只讀定稿那一層。
 * 美術 agent 只交原圖：不去背、不裁切、不縮放，也不寫入 repo 的 `public/`。去背、切格、對齊、縮放、壓縮都由 `tools/` 的工具在建置時完成。
 * 原圖不符合規則（留下綠邊、切格錯誤、動作不連貫）時回報並重畫，不要手動修圖；規則不夠清楚就修改 `art_guide.md`。
