@@ -1,4 +1,4 @@
-"""角色精靈圖建置工具：原圖 (AI 生成) → 去背、切格、對齊、縮放、打包 → 遊戲用的角色圖與設定。
+"""角色圖建置工具：原圖 (AI 生成) → 去背、切格、對齊、縮放、打包 → 遊戲用的精靈圖、全身圖與設定。
 
 設計與流程：private/doc/character_pipeline.md；原圖怎麼畫：private/doc/art_guide.md。只用 Pillow，不連網。
 
@@ -7,8 +7,11 @@
 * 原圖放 reference/characters/<id>/ (不進 git)。reference/ 的正本在 Google Drive 上對照 repo 的資料夾，
   Drive 有掛載時直接讀那裡，否則讀 repo 裡的 reference/ (見 tools/config.py)。
 產出：
-* public/characters/<id>.png：每格 cell×cell，每排一個動畫 (依設定檔 animations 的順序)，
+* public/characters/<id>.png：精靈圖。每格 cell×cell，每排一個動畫 (依設定檔 animations 的順序)，
   角色腳底中心固定在格子的 anchor。
+* public/characters/<id>_full.jpg：全身圖 (設定檔有 fullBody 時)，給選角色介面、角色面板顯示。
+  所有角色都是 512×768；JPEG 沒有透明，去背後鋪上底色。原圖是另外畫的一張 <id>_full_vNN.png，
+  姿勢與視角不用跟精靈圖一樣。
 * public/js/characters.js：所有角色的設定 (全域 const CHARACTERS)，script.js 依它繪製。不要手動修改。
 * tools/work/sprites/<id>/：預覽圖 preview.png、各動畫的 GIF、報告 report.txt (不進 git)。
 
@@ -33,12 +36,16 @@
 * colors (null)：限制色數可以讓檔案小很多，但插畫的漸層會出現色帶；看預覽再決定。
 * tolerance (40)：去背時，RGB 各分量跟背景色都差在這個值以內就算背景。
 * offsets：個別格子的手動偏移 (精靈圖像素)，例如 {"run": {"2": [-2, 0]}} 把 run 第 3 格往左移 2。
+* fullBody (null)：全身圖，例如 { "source": "cleric_full_v01.png" }。source 是原圖檔名，一張圖一個角色
+  (切出不只一格時用最大的一格)；角色要有 680px 高以上，太小會被放大而模糊。
+  background (米色)：底色，"#RRGGBB" 或 ["中央", "四角"] 兩色的放射漸層。
 
 指令 (從 repo 根目錄執行)：
 
     python -m tools.sprites knight     重建一個角色 (可以列多個)
     python -m tools.sprites --all      重建全部角色
     python -m tools.sprites --check    檢查 public/ 的產出是否跟原圖與設定一致，不寫檔
+    python -m tools.sprites --full-body knight   只重建全身圖，精靈圖不動 (不需要精靈圖的原圖)
     python -m tools.sprites template   產生給 Gemini 參考的版面圖 tools/work/sprites/template.png
 
 結束代碼：0 成功；1 處理失敗或檢查不一致；2 用法錯誤。
@@ -57,14 +64,15 @@ from pathlib import Path
 from statistics import median
 
 import PIL
-from PIL import Image, ImageChops, ImageDraw, ImageFilter
+from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageFilter, ImageOps
 
 from tools import config
 
 PILLOW_VERSION = "12.3.0"  # 產出以這個版本為準；版本不同時縮放、減色的結果可能有細微差異，--check 會不一致
 GAME_ANIMATIONS = ("idle", "run")  # script.js 用到的動畫
 REQUIRED = ("name", "source", "animations")
-DEFAULTS = {"charHeight": 96, "cell": 128, "padding": 8, "drawScale": 0.5, "colors": None, "tolerance": 40, "offsets": {}}
+DEFAULTS = {"charHeight": 96, "cell": 128, "padding": 8, "drawScale": 0.5, "colors": None, "tolerance": 40, "offsets": {},
+            "fullBody": None}
 MANIFEST_HEADER = "// 此檔由 tools/sprites.py 產生，請勿手動修改 (見 private/doc/character_pipeline.md)\n"
 MANIFEST_PREFIX = "const CHARACTERS = "
 FRINGE_FACTOR = 2.5      # 去掉反鋸齒邊：邊緣像素跟背景色差在 tolerance × 這個倍數以內就去掉
@@ -73,6 +81,14 @@ ROW_GAP, COL_GAP = 8, 10  # 切格時，至少要有這麼多列 / 欄的空白�
 PLAYER_SIZE = (50, 52)   # 遊戲裡玩家方塊的大小 (script.js 的 PLAYER_WIDTH、PLAYER_HEIGHT)，預覽時畫出碰撞範圍對照
 PREVIEW_FLOORS = ("#4CAF50", "#2F4F4F")  # 預覽用的地板：森林、地牢 (js/stages.js)
 PREVIEW_ZOOM = 3
+FULL_BODY_SIZE = (512, 768)   # 全身圖的大小。所有角色相同，選角色介面才排得整齊
+FULL_BODY_MARGIN = 0.06       # 角色到畫面四邊至少留這個比例的空白
+FULL_BODY_DEFAULTS = {"background": ["#FFF8DC", "#E6C992"]}  # 底色預設是遊戲介面的米色 (style.css 的題目視窗)
+FULL_BODY_PEEL = 8            # 全身圖去邊：由外往內最多剝掉這麼多圈還帶著背景色的像素 (見 clean_edges())
+FULL_BODY_SPILL = 24          # 鮮豔背景的主色比其他色版高出這個值以上，就算「還帶著背景色」
+FULL_BODY_QUALITY = 85        # JPEG 品質。色度不抽樣 (4:4:4)，深色描邊旁邊的鮮豔色塊才不會暈開
+FULL_BODY_TOLERANCE = 8       # --check：全身圖是有損壓縮，色差在這個值以內的像素算相同 (見 same_picture())
+HEX_COLOR = re.compile(r"#[0-9A-Fa-f]{6}")
 
 
 class BuildError(Exception):
@@ -95,11 +111,12 @@ class Frame:
 class Built:
     """一個角色處理完的結果，還沒寫入檔案。"""
 
-    sheet: Image.Image                  # 要寫入 public/characters/ 的精靈圖 (限制色數時是 P 模式)
-    entry: dict                         # characters.js 裡這個角色的設定
+    sheet: Image.Image | None           # 要寫入 public/characters/ 的精靈圖 (限制色數時是 P 模式)；只做全身圖時是 None
+    entry: dict                         # characters.js 裡這個角色的設定 (只做全身圖時只有 fullBody)
     cells: dict[str, list[Image.Image]]  # 每個動畫的格子 (RGBA)，預覽用
     report: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    full_body: Image.Image | None = None  # 要寫入 public/characters/<id>_full.jpg 的全身圖 (RGB)；沒有設定 fullBody 時是 None
 
 
 # --- 設定檔 ---
@@ -143,9 +160,31 @@ def validate_config(raw: dict, where: str) -> dict:
                 problems.append(f"offsets.{name} 沒有第 {n} 格")
             elif not (isinstance(offset, list) and len(offset) == 2 and all(isinstance(v, int) for v in offset)):
                 problems.append(f"offsets.{name}.{n} 要是 [dx, dy] 兩個整數")
+    full_body = raw.get("fullBody")
+    if full_body is not None:
+        problems += _full_body_problems(full_body)
     if problems:
         raise BuildError(f"{where}：" + "；".join(problems))
-    return {**DEFAULTS, **raw}
+    cfg = {**DEFAULTS, **raw}
+    if full_body is not None:
+        cfg["fullBody"] = {**FULL_BODY_DEFAULTS, **full_body}
+    return cfg
+
+
+def _full_body_problems(full_body: object) -> list[str]:
+    if not isinstance(full_body, dict):
+        return ['fullBody 要是 { "source": "原圖檔名" }']
+    problems = []
+    extra = set(full_body) - {"source"} - set(FULL_BODY_DEFAULTS)
+    if extra:
+        problems.append(f"fullBody 不認得的欄位 {sorted(extra)}")
+    if not isinstance(full_body.get("source"), str) or not full_body["source"]:
+        problems.append("fullBody 缺少 source (原圖檔名)")
+    background = full_body.get("background", FULL_BODY_DEFAULTS["background"])
+    colors = background if isinstance(background, list) else [background]
+    if len(colors) not in (1, 2) or not all(isinstance(c, str) and HEX_COLOR.fullmatch(c) for c in colors):
+        problems.append('fullBody.background 要是 "#RRGGBB"，或 ["中央", "四角"] 兩個顏色')
+    return problems
 
 
 def all_character_ids(characters_dir: Path = config.CHARACTERS_DIR) -> list[str]:
@@ -322,13 +361,15 @@ def head_x(img: Image.Image) -> float:
 # --- 建置 ---
 
 def build_character(char_id: str, characters_dir: Path = config.CHARACTERS_DIR,
-                    reference_dir: Path = config.REFERENCE_DIR) -> Built:
-    """依設定檔處理一個角色，結果放在記憶體裡，不寫檔。"""
+                    reference_dir: Path = config.REFERENCE_DIR, full_body_only: bool = False) -> Built:
+    """依設定檔處理一個角色，結果放在記憶體裡，不寫檔。
+    full_body_only：只做全身圖，不讀精靈圖的原圖；回傳的 sheet 是 None、entry 只有 fullBody。"""
     cfg = load_config(char_id, characters_dir)
     source_dir = reference_dir / "characters" / char_id
     report: list[str] = []
     warnings: list[str] = []
     sources: dict[str, list[Frame]] = {}
+    backgrounds: dict[str, tuple[int, int, int]] = {}
 
     def frames_of(name: str) -> list[Frame]:
         if name not in sources:
@@ -340,6 +381,7 @@ def build_character(char_id: str, characters_dir: Path = config.CHARACTERS_DIR,
                 bg = background_color(im)
                 frames = find_frames(key_background(im, cfg["tolerance"]))
             sources[name] = frames
+            backgrounds[name] = bg
             report.append(f"原圖 {name}：{size[0]}×{size[1]}，背景色 #{bg[0]:02X}{bg[1]:02X}{bg[2]:02X}，切出 {len(frames)} 格")
             heights = [f.image.height for f in frames]
             for i, f in enumerate(frames):
@@ -348,6 +390,31 @@ def build_character(char_id: str, characters_dir: Path = config.CHARACTERS_DIR,
                 if f.image.height < median(heights) * 0.3:
                     warnings.append(f"{name} 第 {i} 格很小 ({r - l}×{b - t})，可能是分離的劍尖或雜點，格子編號會因此往後移")
         return sources[name]
+
+    full = cfg["fullBody"]
+    full_body, full_entry = None, {}
+    full_line = "全身圖：沒有 (設定檔沒有 fullBody)，選角色介面與角色面板沒有圖可以顯示"
+    if full:
+        frames = frames_of(full["source"])
+        if not frames:
+            raise BuildError(f"{char_id}：全身圖的原圖 {full['source']} 去背後沒有東西")
+        frame = max(frames, key=lambda f: f.image.width * f.image.height)
+        if len(frames) > 1:
+            warnings.append(f"全身圖的原圖 {full['source']} 切出 {len(frames)} 格，只用最大的一格 "
+                            f"({frame.image.width}×{frame.image.height})；其他部分不會出現在全身圖")
+        with Image.open(source_dir / full["source"]) as im:
+            figure = clean_edges(im.convert("RGB").crop(frame.box), frame.image.getchannel("A"), backgrounds[full["source"]])
+        full_body, full_scale = compose_full_body(figure, full["background"])
+        if full_scale > 1:
+            warnings.append(f"全身圖的原圖太小：角色只有 {figure.height}px 高，放大 {full_scale:.1f} 倍後會模糊 "
+                            f"(至少要 {round(FULL_BODY_SIZE[1] * (1 - 2 * FULL_BODY_MARGIN))}px 高)")
+        full_entry = {"fullBody": {"image": f"characters/{char_id}_full.jpg", "width": full_body.width, "height": full_body.height}}
+        full_line = (f"全身圖 {full_body.width}×{full_body.height}：{full['source']} 的角色 {figure.width}×{figure.height}，"
+                     f"縮放倍率 {full_scale:.4f}，JPEG {len(jpg_bytes(full_body)) / 1024:.1f} KB")
+    if full_body_only:
+        if full_body is None:
+            raise BuildError(f"{char_id}：設定檔沒有 fullBody")
+        return Built(None, full_entry, {}, [*report, full_line], warnings, full_body)
 
     picked: dict[str, list[Frame]] = {}
     source_scales: dict[str, float] = {}
@@ -400,6 +467,7 @@ def build_character(char_id: str, characters_dir: Path = config.CHARACTERS_DIR,
         "animations": {name: {"row": row, "frames": len(images), "fps": cfg["animations"][name]["fps"]}
                        for row, (name, images) in enumerate(cells.items())},
         "attach": {"head": heads},
+        **full_entry,
     }
 
     on_screen = cfg["drawScale"]
@@ -409,13 +477,90 @@ def build_character(char_id: str, characters_dir: Path = config.CHARACTERS_DIR,
         xs = [p[0] for p in points]
         report.append(f"{name}：{len(points)} 格，{cfg['animations'][name]['fps']} fps，頭部水平晃動 {(max(xs) - min(xs)) * on_screen:.1f}px (畫面上)")
     report.append(f"精靈圖 {sheet.width}×{sheet.height}，{'限制 ' + str(cfg['colors']) + ' 色' if cfg['colors'] else '全彩'}，PNG {len(png_bytes(sheet)) / 1024:.1f} KB")
-    return Built(sheet, entry, cells, report, warnings)
+    report.append(full_line)
+    return Built(sheet, entry, cells, report, warnings, full_body)
 
 
 def png_bytes(image: Image.Image) -> bytes:
     buffer = io.BytesIO()
     image.save(buffer, "PNG", optimize=True)
     return buffer.getvalue()
+
+
+# --- 全身圖 ---
+
+def clean_edges(rgb: Image.Image, alpha: Image.Image, bg: tuple[int, int, int]) -> Image.Image:
+    """全身圖專用的去邊，回傳裁到角色範圍的 RGBA。rgb 是原圖 (還沒做溢色修正)，alpha 是 key_background() 去背的結果。
+
+    精靈圖縮小 16 倍以上，key_background() 留下的幾像素綠邊看不出來；全身圖只縮小 2～3 倍，
+    柔邊與 JPEG 壓縮滲進輪廓的背景色會變成一圈明顯的綠邊，所以再處理一次：
+    1. 由外往內最多剝 FULL_BODY_PEEL 圈：邊緣那一圈還帶著背景色的像素設為透明，乾淨的留著。
+    2. 剩下的邊緣 FULL_BODY_PEEL × 2 圈做溢色修正 (背景的主色不超過其他色版)。手臂與身體之間這類狹長的凹角，
+       淡淡的溢色會沿著凹角延伸得比剝掉的範圍更深。
+    只處理綠幕、洋紅這類鮮豔的背景；灰、白等中性背景沒有溢色，不處理。"""
+    # 四周補一圈透明：角色貼著圖的邊緣 (裁到角色範圍的圖一定會) 時，貼邊的那一排才會被當成邊緣
+    rgb, alpha = ImageOps.expand(rgb, 1), ImageOps.expand(alpha, 1, fill=0)
+    channels = list(rgb.split())
+    key = [channels[c] for c in range(3) if bg[c] > 127]
+    other = [channels[c] for c in range(3) if bg[c] <= 127]
+    if max(bg) - min(bg) > 100 and key and other:
+        lowest_key, limit = key[0], other[0]
+        for channel in key[1:]:
+            lowest_key = ImageChops.darker(lowest_key, channel)
+        for channel in other[1:]:
+            limit = ImageChops.lighter(limit, channel)
+        spilled = ImageChops.subtract(lowest_key, limit).point(lambda v: 255 if v > FULL_BODY_SPILL else 0)
+        for _ in range(FULL_BODY_PEEL):
+            edge = ImageChops.subtract(alpha, alpha.filter(ImageFilter.MinFilter(3)))
+            alpha = ImageChops.subtract(alpha, ImageChops.darker(edge, spilled))
+        inner = alpha
+        for _ in range(FULL_BODY_PEEL * 2):
+            inner = inner.filter(ImageFilter.MinFilter(3))
+        rim = ImageChops.subtract(alpha, inner)
+        channels = [Image.composite(ImageChops.darker(channel, limit), channel, rim) if bg[c] > 127 else channel
+                    for c, channel in enumerate(channels)]
+    figure = Image.merge("RGBA", (*channels, alpha))
+    return figure.crop(alpha.getbbox())
+
+
+def compose_full_body(figure: Image.Image, background: str | list[str]) -> tuple[Image.Image, float]:
+    """去背後的角色 → 全身圖 (RGB)：等比例縮放到四周留白以內，左右置中、腳底貼齊下方的留白線，鋪上底色。
+    回傳 (全身圖, 縮放倍率)。"""
+    width, height = FULL_BODY_SIZE
+    margin_x, margin_y = round(width * FULL_BODY_MARGIN), round(height * FULL_BODY_MARGIN)
+    scale = min((width - 2 * margin_x) / figure.width, (height - 2 * margin_y) / figure.height)
+    size = (max(1, round(figure.width * scale)), max(1, round(figure.height * scale)))
+    canvas = _full_body_background(background).convert("RGBA")
+    canvas.alpha_composite(figure.resize(size, Image.Resampling.LANCZOS), ((width - size[0]) // 2, height - margin_y - size[1]))
+    return canvas.convert("RGB"), scale
+
+
+def _full_body_background(background: str | list[str]) -> Image.Image:
+    """全身圖的底：一個顏色是純色；兩個顏色是放射漸層，畫面中央是第 1 個顏色、四個角落是第 2 個。"""
+    colors = [ImageColor.getrgb(c) for c in (background if isinstance(background, list) else [background])]
+    center, corner = colors[0], colors[-1]
+    spread = Image.radial_gradient("L").resize(FULL_BODY_SIZE, Image.Resampling.BICUBIC)  # 中心 0、四個角落 255
+    return Image.composite(Image.new("RGB", FULL_BODY_SIZE, corner), Image.new("RGB", FULL_BODY_SIZE, center), spread)
+
+
+def jpg_bytes(image: Image.Image) -> bytes:
+    buffer = io.BytesIO()
+    image.save(buffer, "JPEG", quality=FULL_BODY_QUALITY, subsampling=0, optimize=True, progressive=True)
+    return buffer.getvalue()
+
+
+def same_picture(first: Image.Image, second: Image.Image) -> bool:
+    """兩張有損壓縮的圖算不算同一張：大小相同，而且色差超過 FULL_BODY_TOLERANCE 的像素不到千分之一。
+    不逐位元組比較：同一份原圖與設定，在不同的作業系統上縮放、壓縮出來的結果可能有極小的差異。"""
+    if first.size != second.size:
+        return False
+    red, green, blue = ImageChops.difference(first.convert("RGB"), second.convert("RGB")).split()
+    worst = ImageChops.lighter(ImageChops.lighter(red, green), blue)  # 每個像素三個色版中最大的差
+    return sum(worst.histogram()[FULL_BODY_TOLERANCE + 1:]) <= first.width * first.height // 1000
+
+
+def full_body_path(char_id: str) -> Path:
+    return config.PUBLIC_DIR / "characters" / f"{char_id}_full.jpg"
 
 
 # --- characters.js ---
@@ -505,14 +650,19 @@ def write_template(path: Path, cols: int = 4, rows: int = 2, cell: int = 256) ->
 
 # --- 指令 ---
 
-def build(ids: list[str], rebuild_all: bool) -> int:
-    """先處理完所有角色，全部成功才寫檔，不會只更新一半。"""
+def build(ids: list[str], rebuild_all: bool, full_body_only: bool = False) -> int:
+    """先處理完所有角色，全部成功才寫檔，不會只更新一半。
+    full_body_only：只重建全身圖與 characters.js 裡的 fullBody，精靈圖不動 (也不需要精靈圖的原圖)。"""
     known = all_character_ids()
+    manifest_path = config.PUBLIC_DIR / "js" / "characters.js"
+    entries = {} if rebuild_all else read_manifest(manifest_path)
     results: dict[str, Built] = {}
     failed = False
     for char_id in ids:
         try:
-            results[char_id] = build_character(char_id)
+            if full_body_only and char_id not in entries:
+                raise BuildError(f"{char_id}：characters.js 裡還沒有這個角色，先重建整個角色 (python -m tools.sprites {char_id})")
+            results[char_id] = build_character(char_id, full_body_only=full_body_only)
         except BuildError as e:
             print(f"失敗：{e}")
             failed = True
@@ -520,17 +670,25 @@ def build(ids: list[str], rebuild_all: bool) -> int:
         print("沒有寫入任何檔案")
         return 1
 
-    manifest_path = config.PUBLIC_DIR / "js" / "characters.js"
-    entries = {} if rebuild_all else read_manifest(manifest_path)
     for char_id, built in results.items():
-        sheet_path = config.PUBLIC_DIR / "characters" / f"{char_id}.png"
-        sheet_path.parent.mkdir(exist_ok=True)
-        sheet_path.write_bytes(png_bytes(built.sheet))
-        preview_dir = config.WORK_DIR / "sprites" / char_id
-        write_preview(char_id, built, preview_dir)
-        entries[char_id] = built.entry
-        print(f"{char_id}：寫入 {config.display_path(sheet_path)}，預覽在 {config.display_path(preview_dir)}/")
-        for line in built.report[-len(built.entry['animations']) - 2:]:
+        if built.sheet is not None:
+            sheet_path = config.PUBLIC_DIR / "characters" / f"{char_id}.png"
+            sheet_path.parent.mkdir(exist_ok=True)
+            sheet_path.write_bytes(png_bytes(built.sheet))
+            preview_dir = config.WORK_DIR / "sprites" / char_id
+            write_preview(char_id, built, preview_dir)
+            entries[char_id] = built.entry
+            print(f"{char_id}：寫入 {config.display_path(sheet_path)}，預覽在 {config.display_path(preview_dir)}/")
+        else:
+            entries[char_id] = {**entries[char_id], **built.entry}
+        full_path = full_body_path(char_id)
+        if built.full_body is not None:
+            full_path.write_bytes(jpg_bytes(built.full_body))
+            print(f"{char_id}：寫入 {config.display_path(full_path)}")
+        elif full_path.is_file():
+            print(f"{char_id}：設定檔沒有 fullBody，{config.display_path(full_path)} 請手動刪除")
+        summary = built.report[-len(built.entry["animations"]) - 3:] if built.sheet is not None else built.report[-1:]
+        for line in summary:
             print(f"  {line}")
         for warning in built.warnings:
             print(f"  注意：{warning}")
@@ -565,10 +723,24 @@ def check(ids: list[str], check_orphans: bool) -> int:
                 same = existing.size == built.sheet.size and existing.convert("RGBA").tobytes() == built.sheet.convert("RGBA").tobytes()
             if not same:
                 problems.append(f"{char_id}：{config.display_path(sheet_path)} 跟重新處理的結果不同")
+        full_path = full_body_path(char_id)
+        if built.full_body is None:
+            if full_path.is_file():
+                problems.append(f"{char_id}：設定檔沒有 fullBody，但 {config.display_path(full_path)} 還在")
+        elif not full_path.is_file():
+            problems.append(f"{char_id}：缺少 {config.display_path(full_path)}")
+        else:
+            with Image.open(full_path) as existing, Image.open(io.BytesIO(jpg_bytes(built.full_body))) as rebuilt:
+                same = same_picture(existing, rebuilt)
+            if not same:
+                problems.append(f"{char_id}：{config.display_path(full_path)} 跟重新處理的結果不同")
     if check_orphans:
         known = set(all_character_ids())
         problems += [f"characters.js 的 {k} 沒有設定檔" for k in entries if k not in known]
-        problems += [f"{config.display_path(p)} 沒有設定檔" for p in (config.PUBLIC_DIR / "characters").glob("*.png") if p.stem not in known]
+        characters_dir = config.PUBLIC_DIR / "characters"
+        orphans = [p for p in characters_dir.glob("*.png") if p.stem not in known]
+        orphans += [p for p in characters_dir.glob("*_full.jpg") if p.stem.removesuffix("_full") not in known]
+        problems += [f"{config.display_path(p)} 沒有設定檔" for p in orphans]
     for line in skipped:
         print(f"略過 {line}")
     for problem in problems:
@@ -587,6 +759,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("ids", nargs="*", help="角色 id (tools/characters/<id>.json)，或 template")
     parser.add_argument("--all", action="store_true", help="重建全部角色")
     parser.add_argument("--check", action="store_true", help="只檢查 public/ 的產出是否一致，不寫檔")
+    parser.add_argument("--full-body", action="store_true", help="只重建指定角色的全身圖，精靈圖不動 (不需要精靈圖的原圖)")
     args = parser.parse_args(argv)
 
     if args.ids == ["template"] and not (args.all or args.check):
@@ -596,6 +769,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.all and args.ids:
         parser.error("--all 不能同時指定角色 id")
+    if args.full_body and (args.all or args.check or not args.ids):
+        parser.error("--full-body 要指定角色 id，不能跟 --all、--check 一起用")
     if PIL.__version__ != PILLOW_VERSION:
         print(f"注意：Pillow 是 {PIL.__version__}，產出以 {PILLOW_VERSION} 為準")
     if args.check:
@@ -604,7 +779,7 @@ def main(argv: list[str] | None = None) -> int:
         return build(all_character_ids(), rebuild_all=True)
     if not args.ids:
         parser.error("請指定角色 id、--all、--check 或 template")
-    return build(args.ids, rebuild_all=False)
+    return build(args.ids, rebuild_all=False, full_body_only=args.full_body)
 
 
 if __name__ == "__main__":

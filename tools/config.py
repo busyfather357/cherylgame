@@ -32,11 +32,10 @@ def display_path(path: Path) -> str:
     """相對於 repo 根目錄、以 / 分隔的路徑，報告在任何系統上都一樣。
     Drive 上的檔案顯示成 Drive:<相對路徑> (兩邊的資料夾結構相同)。"""
     resolved = path.resolve()
-    try:
-        return resolved.relative_to(REPO_ROOT).as_posix()
-    except ValueError:
-        pass
-    try:
-        return "Drive:" + resolved.relative_to(DRIVE_DIR.resolve()).as_posix()
-    except ValueError:
-        return path.as_posix()
+    # 先比對 Drive：在 Linux、macOS 上，預設的 Windows 路徑 (G:\...) 是相對路徑，解析後會落在目前的資料夾 (通常是 repo) 底下
+    for prefix, base in (("Drive:", DRIVE_DIR.resolve()), ("", REPO_ROOT)):
+        try:
+            return prefix + resolved.relative_to(base).as_posix()
+        except ValueError:
+            pass
+    return path.as_posix()
