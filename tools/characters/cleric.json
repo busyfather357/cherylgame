@@ -1,0 +1,8 @@
+{
+    "name": "牧師",
+    "source": "cleric_idle_v01.png",
+    "animations": {
+        "idle": { "source": "cleric_idle_v01.png", "frames": [0, 1, 2, 3], "fps": 6 },
+        "run":  { "source": "cleric_run_v04.png", "frames": [0, 1, 2, 3], "fps": 8 }
+    }
+}

@@ -1,6 +1,6 @@
 # 美術素材生成規範（給 Google Antigravity）
 
-規範版本：2026-11-12 v2（正本在 git repo 的 `private/doc/art_guide.md`；Google Drive 上同一個路徑的檔案是副本，兩邊不同時以版本較新的為準）
+規範版本：2026-11-13 v3（正本在 git repo 的 `private/doc/art_guide.md`；Google Drive 上同一個路徑的檔案是副本，兩邊不同時以版本較新的為準）
 
 這份文件給負責畫圖的 AI agent（Google Antigravity）閱讀，也是維護者下指令時的依據。內容是《RPG 數學挑戰：木木島趣味練習場》的角色圖與背景圖要怎麼畫、存在哪裡、怎麼交接。
 
@@ -10,9 +10,9 @@
 
 | 誰 | 做什麼 | 不做什麼 |
 |---|---|---|
-| **Antigravity（美術）** | 依本文件生成原圖，存到 Google Drive 的 `Antigravity_Data/cherylgame/reference/`，寫生圖紀錄 | 不去背、不裁切、不縮放、不壓縮；不改 git repo；不動 `reference/` 以外的東西 |
-| **Claude Code（程式與轉檔）** | 把核可的原圖轉成遊戲用的檔案（去背、切格、對齊、縮放、壓縮）、寫遊戲程式 | 不生圖 |
-| **維護者** | 提需求、在每個關卡挑圖與核可 | |
+| **Antigravity（美術與轉檔驗證）** | 依本文件編寫提示詞、生成或接收維護者由 Gemini App 生成的原圖，以 `tools/sprites.py` 檢查去背與切格，存到 Google Drive 的 `Antigravity_Data/cherylgame/reference/`，寫生圖紀錄 | 原圖不去背、不裁切、不縮放、不壓縮 |
+| **Claude Code／Antigravity（程式與轉檔）** | 把核可的原圖轉成遊戲用的檔案（去背、切格、對齊、縮放、壓縮）、寫遊戲程式 | |
+| **維護者** | 提需求、在每個關卡挑圖與核可；必要時用 Gemini App 快速抽圖傳給 Antigravity 審核 | |
 
 原圖會由 `tools/sprites.py` 自動處理。**第 6 節的技術規則不是美感偏好，而是這個工具的輸入條件**：不符合時工具會切錯、留下綠邊，或把角色的一部分吃掉，那張圖就只能重畫。
 
@@ -37,20 +37,21 @@
 
 * 程式、設定、文件由 git 管理，不放 Drive。唯一的例外是本文件：Drive 的 `private/doc/art_guide.md` 放一份副本，讓美術 agent 讀得到。
 * **`reference/` 整個放在 Drive，Drive 是正本**。它是放不進 git 的大型檔案（原圖、候選圖、畫風基準圖），repo 的 `.gitignore` 排除了這個資料夾。Drive 的空間大，刪除檔案就能釋出空間；git 的歷史刪不掉。
-* 美術 agent 只在 `Antigravity_Data/cherylgame/reference/` 裡面寫入；`Antigravity_Data/` 底下其他專案的資料夾不要碰。
+* 美術 agent 只在 `Antigravity_Data/cherylgame/reference/`（以及同步本文件副本 `private/doc/art_guide.md`）寫入；`Antigravity_Data/` 底下其他專案的資料夾不要碰。
 
 ```text
 Antigravity_Data/cherylgame/          # = 專案根目錄
 ├── private/doc/art_guide.md          # 本文件的副本 (正本在 git)
 └── reference/                        # 正本在這裡，不進 git
     ├── style/                        # 畫風基準圖：維護者核可後才放進來，之後生圖時附上當參考
+    │   └── character_style.png       # 角色畫風基準圖 (cleric_base_v08.png)
     ├── characters/
     │   └── <id>/                     # 一個角色一個資料夾，例如 cleric
     │       ├── brief.md              # 需求單 (維護者或 Claude Code 寫，見 9.1)
     │       ├── log.md                # 生圖紀錄 (Antigravity 寫，見 9.2)
-    │       ├── <id>_base_v02.png     # 這一層只放「定稿」：轉檔工具讀的就是這一層
+    │       ├── <id>_base_v08.png     # 這一層只放「定稿」：轉檔工具讀的就是這一層
     │       ├── <id>_idle_v01.png
-    │       ├── <id>_run_v03.png
+    │       ├── <id>_run_v04.png
     │       └── drafts/               # 所有生成的圖 (候選、重畫、被淘汰的) 都先放這裡
     │           ├── <id>_base_v01.png
     │           └── <id>_base_v02.png
@@ -84,7 +85,7 @@ Antigravity_Data/cherylgame/          # = 專案根目錄
 | 4. 造型變化（有需求才做） | `<id>_outfit_<名稱>_vNN.png` | 核可的 base | 核可後，新造型重做 2、3 |
 
 * 基準立繪是之後所有圖的依據，值得多花時間；它沒過關就不要畫動畫。
-* 待機與跑步分成兩張圖畫，不要畫在同一張：每格的解析度比較高，也比較不會排錯。兩張圖的角色大小不需要相同（工具會處理）。
+* 待機與跑步分成兩張圖畫，不要畫在同一張：每格的解析度比較高，也比較不會排錯。兩張圖的角色大小不需要相同（`tools/sprites.py` 會依各原圖第 1 格高度獨立計算縮放倍率）。
 * 動畫是最容易失敗的步驟：動作不連貫、每格的服裝不一樣、排版不照要求。工具能修正位置與大小，**修不了動作本身**。重畫 2 輪還是不行就回報，維護者可以決定這個角色只用靜態立繪。
 * 一次只改一件事：只改姿勢，或只改服裝，不要同時改。
 
@@ -104,6 +105,19 @@ Recommend: v01
 Waiting for approval.
 ```
 
+### 4.4 Gemini App + Antigravity 協作生圖流程（推薦）
+
+實測發現兩個環境限制：
+1. **Antigravity 內建生圖配額限制**：Antigravity 的 `generate_image`（`gemini-3.1-flash-image`）每 5 小時滾動視窗僅能生成約 **2～3 張圖**，且平行發送請求容易觸發 ~3 秒的 burst rate limit；而消費者端 **Gemini App（網頁／手機版）生圖幾乎無配額限制**。
+2. **Google Drive `drive.file` 權限範圍**：Antigravity 連接 Google Drive 的 OAuth 權限為 `drive.file`，只能讀寫「由 Antigravity 自己建立與上傳的檔案」。維護者直接從 iPhone 或電腦放進 Google Drive 資料夾的檔案，`gdrive` CLI 看不到。
+
+因此最順暢的協作流程為：
+1. **Antigravity 產出完整英文 Prompt**（或微調修正指令）。
+2. **維護者在 Gemini App 貼上指令抽圖**，把滿意的圖片**直接附加在 Antigravity 對話視窗傳給 Agent**。
+3. **Antigravity 自動驗證與歸檔**：
+   * 收到圖片後立刻跑 `tools/sprites.py`（`key_background`、`find_frames`、產生預覽 GIF），精確檢查切出幾格、有無封閉綠洞、頭頂水平晃動幾像素。
+   * 轉存為無損 `.png`、依第 3 節命名規則改名（例如 `cleric_run_v04.png`），並由 Antigravity 透過 `gdrive` CLI 上傳至 `drafts/` 與定稿區（由 Antigravity 上傳的檔案，之後 Drive 與 Agent 兩邊就都看得到了），同時把紀錄寫入 `log.md`。
+
 ## 5. 畫風
 
 ### 5.1 提示詞的組成
@@ -119,34 +133,32 @@ Waiting for approval.
 
 ### 5.2 角色的 STYLE LOCK（整段照抄）
 
+目前角色採用維護者核可的**等級 D（日系奇幻動漫／寫實比例，6～7 頭身）**（基準圖為 `reference/style/character_style.png`，即 `cleric_base_v08.png`）：
+
 ```text
-Art style: clean 2D cartoon game character illustration for an all-ages fantasy adventure RPG.
-Flat cel shading: every area is one flat base color plus at most one flat shadow tone. No gradients, no airbrush, no painterly texture, no rim light.
-Bold, even, dark brown outline around the entire silhouette and between the main shapes. The outline must stay clearly visible when the image is shrunk to 96 pixels tall.
-Proportions: about 3 to 3.5 heads tall. Big readable head, compact sturdy body, clearly drawn hands and feet. A capable young adventurer, not a baby-like chibi, not a toddler, not a plush toy.
-Face: simple and calm. Small-to-medium oval eyes with one small highlight, short simple eyebrows, small closed-mouth confident smile. No blush marks, no oversized sparkling eyes.
-Design: large simple shapes, 4 to 6 main colors, strong light/dark contrast between neighbouring areas. No tiny ornaments, no fine patterns, no thin dangling details: they disappear at game size.
+Art style: clean 2D anime and fantasy game character illustration for an all-ages adventure RPG.
+Shading: clean cel shading with rich shadow tones on fabric folds, hair strands, and metallic gold trim. No soft airbrush blur on the outer silhouette.
+Bold, clean, dark brown outline around the entire silhouette and between the main shapes. The outline must stay clearly visible when shrunk.
+Proportions: 6 to 7 heads tall, slender and capable fantasy adventurer build, natural anatomy, clearly drawn hands and boots. Not chibi, not cartoon, not a toddler.
+Face: refined and calm anime-style face with clear eyes, defined eyebrows, and a calm confident expression.
+Design: clear color separation (4 to 6 main colors), strong light/dark contrast between neighbouring areas.
 Not pixel art, not a 3D render, not photorealistic, not a sticker with a white border.
 ```
 
-為什麼這樣定：
+（若特定角色需求單指定採用 3～3.5 頭身卡通風格，則改用下表等級 B 的寫法。）
 
-* **粗描邊**：實測（第 11 節）細描邊縮到 48 像素幾乎看不見。遊戲有 7 種地板顏色（草綠、沙黃、深灰綠、冰藍、橘、深紫、深藍），描邊夠粗，角色在每種地板上才分得出來。
-* **平塗、不要漸層**：縮小後比較乾淨，檔案也小很多。
-* **3～3.5 頭身**：2 頭身的 Q 版太幼（維護者 2026-11-12 的意見），5 頭身以上縮小後臉只剩幾個像素。
-* **大色塊、4～6 個主色**：小裝飾縮小後只會變成雜點。
+### 5.3 頭身比例與畫風等級
 
-### 5.3 可愛程度
-
-維護者覺得第一張測試圖「太可愛」。造成的原因是提示詞裡的 `cute`、`chibi`、`expressive big eyes`、`warm friendly smile`、`children's`，這些字**不要再用**。STYLE LOCK 預設是下表的 B。要調整時只換 `Proportions:` 與 `Face:` 兩行，其他不動：
+維護者覺得第一張測試圖（2.5 頭身 Q 版）「太可愛」。造成的原因是提示詞裡的 `cute`、`chibi`、`expressive big eyes`、`warm friendly smile`、`children's`，這些字**不要再用**。2026-11-12 實測牧師角色時，維護者進一步指定改用 **6～7 頭身的日系奇幻動漫寫實比例（下表 D）** 並定稿為預設風格：
 
 | 等級 | Proportions / Face 的寫法 | 效果 |
 |---|---|---|
-| A. Q 版 | `about 2 to 2.5 heads tall, chibi` / `large round eyes, blush marks` | 第一張測試圖的樣子，太幼 |
-| **B. 冒險（預設）** | STYLE LOCK 現在的寫法 | 頭大好認，但像個能冒險的少年、少女 |
-| C. 英雄 | `about 4.5 heads tall, slim athletic build` / `small sharp eyes, serious determined expression` | 比較帥氣；縮到 48 像素後臉部細節會糊掉 |
+| A. Q 版 | `about 2 to 2.5 heads tall, chibi` / `large round eyes, blush marks` | 第一張測試圖的樣子，太幼（不採用） |
+| B. 冒險卡通 | `about 3 to 3.5 heads tall. Big readable head, compact sturdy body` / `Small-to-medium oval eyes with one small highlight` | 偏美式卡通少年風（`cleric_base_v01～v02`） |
+| C. 英雄 | `about 4.5 heads tall, slim athletic build` / `small sharp eyes, serious determined expression` | 折衷頭身比 |
+| **D. 奇幻動漫（預設）** | 5.2 節現在的寫法（`6 to 7 heads tall, slender and capable fantasy adventurer build`） | 成熟精緻的日系奇幻立繪（`cleric_base_v08`，已存為 `reference/style/character_style.png`） |
 
-等級 B 的第一張圖經維護者核可後，複製到 `reference/style/character_style.png`。**之後所有角色的基準立繪都附上這張圖**，並在任務的開頭加上：
+**之後所有角色的基準立繪都附上 `reference/style/character_style.png`**，並在任務的開頭加上：
 
 ```text
 Match the art style of the attached style reference exactly (outline thickness, shading, proportions, face style). The style reference shows a DIFFERENT character: copy only the style, not the character.
@@ -201,13 +213,13 @@ View: full body, body in side view facing RIGHT, head turned slightly toward the
 | 整片單一背景色 | 工具取四邊像素的顏色當背景色，從圖的邊緣往內去掉相近的顏色。背景有漸層或紋理就去不乾淨 |
 | 不要發光、光暈、半透明 | 光暈是角色色與背景色的混色，去背後會留下一圈綠色。實測第一張測試圖的水晶光暈留下 1100 多個綠色像素（第 11 節） |
 | 角色身上沒有背景色 | 跟背景色相近、又連到角色外面的部分會被當成背景挖掉 |
-| 手與道具貼近身體，不要圍出封閉的洞 | 工具只去掉「跟圖的邊緣相連」的背景。手叉腰、法杖與身體之間圍出來的小洞會留下綠色。跑步時手臂擺動難免出現小洞，盡量避免，有的話記在 `log.md` |
+| 手與道具貼近身體，法杖與裙擺之間保持開放通道 | 雖然 `tools/sprites.py`（2026-11-13 起）在綠幕／洋紅等高飽和度背景（`max(bg) - min(bg) > 100`）下，會一併清除角色內部與背景色接近的封閉小洞（如手肘彎曲處、雙腿邁開處），但若直立的法杖與飛揚的裙擺碰在一起圍成大面積封閉洞，內側的陰影與描邊反鋸齒仍可能殘留暗綠色。因此法杖底部與裙擺之間應保留開放的垂直通道（open vertical channel） |
 | 沒有地面陰影；沒有東西低於鞋底 | 工具把最下緣當成腳底來對齊。陰影或垂到腳下的披風會讓角色浮在半空 |
-| 沒有東西高過頭頂 | 工具把最上緣當成頭頂（之後放帽子等配件）。高舉的武器會讓配件飄在武器上 |
+| 沒有東西高過頭頂 | 工具把最上緣當成頭頂（之後放帽子等配件）。高舉的武器會讓配件飄在武器上；提示詞應明確要求法杖頂端低於下巴或兜帽頂端 |
 | 一個角色是一整塊，沒有分離的小東西 | 分離的小塊會被當成另一格，後面的格子編號全部錯開 |
 | 四周留空、不裁切 | 角色碰到圖的邊緣時，背景色的判斷與切格都會出錯 |
 | 面向右 | 遊戲只存面向右的圖，往左走時水平翻轉 |
-| 動畫每格之間留很寬的空白 | 工具靠空白帶切格。兩格碰在一起會被當成一格 |
+| 動畫每格之間留很寬的垂直空白帶（整條由上到下暢通） | 工具靠「垂直投影」的空白欄（至少連續 10 像素寬整欄全透明）切格。**前一格最右側的法杖頂端（在上方）與下一格最左側向後踢的靴子或裙擺（在下方）即使在畫面上一上一下沒有碰到，只要水平 `x` 座標重疊，就會被當成同一格** |
 | 道具不要伸得太遠 | 每格是固定大小的正方形，寬度大約是角色站立身高的 1.3 倍。任何一格比這個寬，邊緣就會被裁掉；保守一點，每格的寬度不要超過站立的身高 |
 | 上半身的輪廓每格一致 | 工具用頭與軀幹的位置做水平對齊。某一格突然多出一大塊（例如披風飛起來），角色會左右抖動 |
 
@@ -260,27 +272,29 @@ Layout: all 4 characters are the same size, evenly spaced, with their feet on th
 
 ### 6.8 範本：跑步動畫（步驟 3）
 
-附上核可的 `<id>_base` 圖。
+附上核可的 `<id>_base` 圖（**務必在全新對話只附上單人基準圖，不要拿已經畫成 4 人的失敗動畫圖做局部修改**，否則模型會鎖死原本擁擠的 4 人間距）。
 
 ```text
-Use the attached image as the exact character reference: same face, hair, outfit, colors, proportions, outline thickness and art style. Do not redesign or add anything.
+Use the attached single-character image as the exact character reference: same face, hair, outfit, colors, proportions, outline thickness and art style. Do not redesign or add anything.
 Character: [CHARACTER].
 Create a sprite strip: ONE horizontal row of exactly 4 frames of this same character running to the RIGHT, on a wide 16:9 canvas.
+CRITICAL SPACING AND SILHOUETTE RULE:
+1. Make each character slightly smaller (about 55% of the canvas height) so all 4 characters fit comfortably with HUGE wide vertical columns of empty pure green #00FF00 background between them (at least 100 pixels of empty green space between each character).
+2. Keep the silhouette COMPACT and NARROW in every frame: the skirt/robe and cape must hang relatively straight down and NEVER flare or billow out wide to the left or right.
+3. Nothing from Frame 1 (staff, hand, skirt, boots) may come anywhere near Frame 2. Nothing from Frame 2 may come anywhere near Frame 3. Nothing from Frame 3 may come anywhere near Frame 4. Every frame must have a completely clear, unbroken vertical strip of pure #00FF00 green from the top edge of the canvas to the bottom edge.
 Animation: 4-frame run cycle that loops smoothly (frame 4 leads back into frame 1).
-Frame 1: far leg stretched forward touching the ground, near leg stretched back, body leaning slightly forward.
-Frame 2: both knees bent with the legs passing under the body, both feet off the ground, body at its highest point.
-Frame 3: the opposite of frame 1: near leg stretched forward touching the ground, far leg stretched back.
-Frame 4: like frame 2 with the other leg in front, body at its highest point.
-The free arm swings opposite to the legs. Held items stay in the same hand, close to the body, in every frame. The head, hair, face and outfit are identical in every frame. Cape and hair trail only slightly behind.
+Frame 1: left leg stepping forward, right leg stepping back, body leaning slightly forward, skirt hem compact.
+Frame 2: knees bent with legs passing directly under the body, both feet slightly off the ground, body at its highest point.
+Frame 3: right leg stepping forward, left leg stepping back, skirt hem compact.
+Frame 4: knees bent with the other leg passing under the body, both feet slightly off the ground, body at its highest point.
+The free arm swings close to the torso. The staff stays held upright in the right hand, close in front of the body, with its top below the top of the hood and its bottom tip above the soles of the boots.
 View: full body, body in side view facing RIGHT, head turned slightly toward the viewer (3/4 view) so both eyes are visible.
-Layout: all 4 characters are the same size, evenly spaced, with the lowest foot of each frame on the same invisible horizontal line. Leave a wide gap of empty background between neighbouring frames, at least one third of the character's width. Frames never touch or overlap. No dividing lines, no frame numbers.
+Layout: all 4 characters are the exact same size, evenly spaced horizontally across the 16:9 canvas, with the lowest foot of each frame on the same invisible horizontal line. No dividing lines, no frame numbers.
 
 [STYLE LOCK]
 
 [TECH LOCK]
 ```
-
-長袍、長裙的角色，把 Frame 1～4 的腿部描述改成：`The robe hem swings with each step and the feet are clearly visible below the hem, alternating front and back.`
 
 ### 6.9 範本：造型變化（步驟 4）
 
@@ -298,20 +312,20 @@ Do not change anything else.
 
 新造型核可後，它就是那個造型的 base，再照 6.7、6.8 畫動畫。
 
-### 6.10 完整範例：牧師的基準立繪
+### 6.10 完整範例：牧師的基準立繪（等級 D 成熟動漫奇幻比例）
 
 ```text
-A single game character, alone on the canvas: a young female cleric (healer), about 14 years old, shoulder-length brown hair with straight bangs. She wears a white ankle-length robe with wide gold trim along the hem, cuffs and front opening, a soft blue hooded short cape with the hood up, fastened at the collar with a round blue clasp, and plain brown boots. She holds a short wooden staff topped with a pale blue crystal.
+A single game character, alone on the canvas: a graceful young adult female cleric (healer), slender and tall anime fantasy proportions, long flowing chestnut-brown hair. She wears an ornate white and royal-blue liturgical bodice with gold trim, a layered white pleated skirt with blue and gold borders, a royal-blue hooded capelet draped over her shoulders with the hood up, and white and blue knee-high boots with gold accents. She holds a golden winged healing staff topped with a solid sky-blue crystal sphere.
 View: full body, body in side view facing RIGHT, head turned slightly toward the viewer (3/4 view) so both eyes are visible, both feet on the ground pointing right.
-Pose: relaxed neutral standing pose, arms down and close to the body, the staff held upright in the front hand with its lower end resting beside the feet and its crystal no higher than her chin.
+Pose: graceful standing pose facing RIGHT, left hand resting gently near her chest, right hand holding the golden staff upright in front of her body with a clear open gap of green background between the staff shaft and her skirt (the skirt hem must NOT touch the staff), the lower tip of the staff resting above the level of her boot soles, and the top of the staff staying slightly below the top of her hood.
 Canvas: square 1:1. The character is centered and about 80% of the canvas height.
 
-Art style: clean 2D cartoon game character illustration for an all-ages fantasy adventure RPG.
-Flat cel shading: every area is one flat base color plus at most one flat shadow tone. No gradients, no airbrush, no painterly texture, no rim light.
-Bold, even, dark brown outline around the entire silhouette and between the main shapes. The outline must stay clearly visible when the image is shrunk to 96 pixels tall.
-Proportions: about 3 to 3.5 heads tall. Big readable head, compact sturdy body, clearly drawn hands and feet. A capable young adventurer, not a baby-like chibi, not a toddler, not a plush toy.
-Face: simple and calm. Small-to-medium oval eyes with one small highlight, short simple eyebrows, small closed-mouth confident smile. No blush marks, no oversized sparkling eyes.
-Design: large simple shapes, 4 to 6 main colors, strong light/dark contrast between neighbouring areas. No tiny ornaments, no fine patterns, no thin dangling details: they disappear at game size.
+Art style: refined 2D anime fantasy game character illustration, sleek and heroic aesthetic.
+Clean cel shading: crisp base colors with clean, well-defined shadow planes. No noisy painterly texture, no airbrush blur, no soft outer glow.
+Clear, consistent dark brown or charcoal outline around the entire silhouette and major forms so the character remains readable when scaled down to 96 pixels tall.
+Proportions: 6 to 7 heads tall, slender and graceful anime/fantasy adventure proportions (like Granblue Fantasy, Fire Emblem Heroes, or classic JRPG character art). Mature, poised adventurer look — NOT chibi, NOT super-deformed, NOT big-headed cartoon, NOT toddler-like.
+Face: expressive anime-style eyes with clean highlights, poised and gentle confident expression, clean nose and mouth lines.
+Design: clear color separation (4 to 6 main colors) with high contrast between outfit sections so the silhouette and limbs remain distinct at game size.
 Not pixel art, not a 3D render, not photorealistic, not a sticker with a white border.
 
 Technical requirements (must all be followed):
@@ -319,8 +333,8 @@ Background: one single flat solid color, pure chroma green #00FF00, filling the 
 No cast shadow, no ground shadow, no reflection under the feet.
 No glow, halo, light rays, sparkles, particles, smoke, magic effects, motion lines, or any semi-transparent element. Crystals, gems and metal are drawn as solid flat shapes with a dark outline.
 Each character is one solid connected shape. Nothing floats or is detached from the body.
-No green anywhere on the character, and no green light reflected on the character.
-Keep arms and held items close to or overlapping the body, so the background does not show through closed gaps or loops.
+No green anywhere on the character (no green gems, no green trim, no green eyes), and no green light reflected on the character.
+Do not form any enclosed green loops between the staff and the skirt: leave an open vertical channel of green background between the bottom of the staff and the boots/skirt so the green background outside flows freely around the staff.
 Nothing extends below the soles of the shoes: cape, hair, weapon and staff tips all end above the feet. Nothing rises above the top of the head or hat.
 The whole body is inside the canvas with empty background margin on all four sides. Nothing is cropped.
 No text, letters, numbers, logos, watermark, signature, borders, frames, labels or UI.
@@ -377,18 +391,18 @@ Composition: the main subject is in the horizontal center of the image and in th
 
 1. 背景是不是整片同一個綠色（或洋紅），沒有漸層、暗角、紋理、格線？
 2. 有沒有地面陰影、發光、光暈、閃光、粒子、動作線？
-3. 角色身上有沒有跟背景相近的顏色？
+3. 角色身上有沒有跟背景相近的顏色（例如法杖上的綠寶石）？
 4. 全身是不是都在畫面內，四邊都留空？
 5. 是不是面向右？
-6. 有沒有東西低於鞋底，或高過頭頂？
+6. 有沒有東西低於鞋底，或高過頭頂（法杖頂端有沒有超過兜帽／頭頂）？
 7. 有沒有文字、浮水印、外框、白色貼紙邊？
 8. 描邊夠不夠粗？把圖縮到約 100 像素高來看，輪廓、臉、主要色塊還分得出來嗎？
-9. 比例是不是 3～3.5 頭身、沒有腮紅與超大眼睛？
+9. 比例是不是符合需求單指定的畫風等級（預設等級 D 為 6～7 頭身成熟動漫奇幻比例）？
 
 **動畫圖再加上**
 
 10. 是不是剛好 4 格、排成一橫排？
-11. 相鄰兩格之間有沒有明顯的空白，沒有碰在一起？
+11. 相鄰兩格之間有沒有**由上到下完全暢通的垂直空白帶**（前一格上方的法杖與下一格下方的後腳靴子在水平 `x` 座標上沒有重疊）？
 12. 每格的角色是不是一樣大、腳在同一條水平線上？
 13. 每格的臉、髮型、服裝、顏色、道具跟 base 一樣嗎？道具有沒有換手？
 14. 待機：腳的位置每格都一樣嗎？跑步：4 格的腿是不是前後交替、能接回第 1 格？
@@ -407,8 +421,8 @@ Composition: the main subject is in the horizontal center of the image and in th
 # cleric（牧師）
 - 種類：角色
 - 要做的步驟：1（基準立繪）
-- 外觀：女牧師，白色長袍金邊，淺藍色連帽短披風，短木杖（水晶不要發光）
-- 可愛程度：B
+- 外觀：女牧師，白藍配金邊禮服與百褶裙，皇家藍連帽披肩，金翼天藍水晶法杖（水晶不要發光）
+- 可愛程度：D（6～7 頭身成熟動漫奇幻風）
 - 背景色：綠（角色沒有綠色）
 - 備註：
 ```
@@ -424,7 +438,7 @@ Composition: the main subject is in the horizontal center of the image and in th
 - 日期：2026-11-12
 - 步驟：1 基準立繪
 - 生圖工具／模型：（名稱與版本）
-- 規範版本：2026-11-12 v2
+- 規範版本：2026-11-13 v3
 - 附上的參考圖：無
 - 自我檢查：通過／第 N 項不合格（說明）
 - 提示詞：
@@ -434,18 +448,18 @@ Composition: the main subject is in the horizontal center of the image and in th
 
 提示詞跟範本不同的地方（例如為了修正某個問題加了一句），在這裡說明加了什麼、為什麼。有效的修改會由維護者回寫到本文件。
 
-## 10. 給 Claude Code：轉檔與交接
+## 10. 給 Claude Code／Antigravity：轉檔與交接
 
 * 維護者的電腦上，Google Drive 掛載在 `G:\我的雲端硬碟\`，對照專案根目錄的資料夾是 `G:\我的雲端硬碟\Antigravity_Data\cherylgame\`。
 * **`tools/` 的 Python 工具直接讀 Drive 的 `reference/`**（`tools/config.py` 的 `REFERENCE_DIR`），不用複製。Drive 沒有掛載、或 Drive 上沒有 `reference/` 時，才讀 repo 裡的 `reference/`。位置可以用環境變數 `CHERYLGAME_DRIVE_DIR` 改。
 * Claude Code 在 Drive 上只讀定稿（`<id>/` 那一層），不修改、不刪除美術 agent 的檔案；可以寫 `brief.md`。
 * **角色**：定稿已經在 `reference/characters/<id>/`。建立 `tools/characters/<id>.json`，執行 `python -m tools.sprites <id>`，看 `tools/work/sprites/<id>/` 的預覽與報告。細節見 [`character_pipeline.md`](character_pipeline.md) 4.3 節。
-    * `source` 填定稿的檔名（含版本號，例如 `cleric_idle_v02.png`）。換定稿時檔名會變，要跟著改設定檔。
-    * 待機與跑步是兩張原圖：`animations` 裡各自用 `"source"` 指定，例如 `"idle": { "source": "cleric_idle_v02.png", "frames": [0, 1, 2, 3], "fps": 6 }`。設定檔最上層的 `source` 填 idle 那張。
+    * `source` 填定稿的檔名（含版本號，例如 `cleric_idle_v01.png`）。換定稿時檔名會變，要跟著改設定檔。
+    * 待機與跑步是兩張原圖：`animations` 裡各自用 `"source"` 指定，例如 `"idle": { "source": "cleric_idle_v01.png", "frames": [0, 1, 2, 3], "fps": 6 }`。設定檔最上層的 `source` 填 idle 那張。`tools/sprites.py` 會依每張原圖各自的第 1 格身高分別計算縮放倍率，確保不同原圖的角色縮到相同的 `charHeight`（預設 96px）。
     * 只有基準立繪、沒有動畫的角色：`idle` 與 `run` 都用 `"frames": [0]`，角色是靜態的（程式動畫還沒做）。
     * 不用洋紅背景另外設定，工具會自己判斷背景色。
 * **背景**：把 `reference/backgrounds/<id>/` 的定稿縮成 1600×1600、WebP 品質 75、200 KB 以內，放到 `public/`（目前沒有專用工具；商店背景的版面見架構文件第 3 節）。
-* 轉檔時發現原圖不符合規則（留下綠邊、切格錯誤、動作不連貫），回報是哪一條，由維護者請 Antigravity 重畫；不要用手動修圖補救。規則本身不夠清楚時，修改本文件並提高規範版本。
+* 轉檔時發現原圖不符合規則（留下綠邊、切格錯誤、動作不連貫），回報是哪一條，由維護者或 Antigravity 依規則重畫或局部修整；不要用手動 P 圖補救。規則本身不夠清楚時，修改本文件並提高規範版本。
 * 本文件修改後，提高開頭的規範版本，並把新版複製到 Drive 的同一個路徑（`Antigravity_Data/cherylgame/private/doc/art_guide.md`）。
 
 ### 10.1 目前遊戲還不支援的素材
@@ -476,10 +490,26 @@ Composition: the main subject is in the horizontal center of the image and in th
 | 畫風 | 約 2.5 頭身、大眼睛、腮紅：維護者覺得太可愛 |
 | 腳底、頭頂、面向、留空 | 合格 |
 
-本規範的 STYLE LOCK（粗描邊、3～3.5 頭身、不要腮紅）與 TECH LOCK（不要發光、手與道具貼近身體）就是針對這幾項寫的。
+本規範的 STYLE LOCK（粗描邊、不要腮紅）與 TECH LOCK（不要發光、手與道具貼近身體）就是針對這幾項寫的。
 
-### 11.2 待確認（還沒有實測）
+### 11.2 2026-11-12～11-13：牧師（`cleric`）完整生圖與轉檔實戰紀錄
 
-* 第 5.2 節的 STYLE LOCK 還沒有實際生過圖。第一張等級 B 的基準立繪出來後，由維護者決定可愛程度是否合適，定稿放進 `reference/style/character_style.png`。
-* 第 6.7、6.8 節的動畫範本還沒有實測，尤其是「一橫排 4 格、16:9」Antigravity 能不能穩定做到。第一個角色做完後把有效的寫法回寫。
-* 背景的畫風基準 `reference/style/background_style.png`：建議用現有商店背景的原圖，由維護者放入。
+以「Antigravity 撰寫提示詞與執行 `tools/sprites.py` 檢查 ＋ 維護者用 Gemini App 生圖並貼回對話視窗」的雙人協作流程，完成第一個新角色 `cleric` 的基準立繪、待機動畫、跑步動畫與轉檔：
+
+1. **畫風升級（等級 B → 等級 D）**：
+    * `cleric_base_v01`～`v05` 為 Antigravity 依舊版 3～3.5 頭身（等級 B）生成的候選圖。維護者審核後決定改用 **6～7 頭身成熟動漫奇幻風（等級 D）**。
+2. **基準立繪（`cleric_base_v06`～`v08`）的修正經驗**：
+    * `v06`：維護者先在 Gemini App 生成正面偏左、裙擺寬大碰到法杖、法杖鑲綠寶石、且法杖高過頭頂的圖。經 `tools/sprites.py` 實測，法杖與裙擺圍出的封閉區留下 9,418 個綠色像素，綠寶石也被染色。
+    * `v07`：提示詞改為面向右、天藍寶石、法杖低於兜帽，但裙擺右下角仍輕觸法杖底端，圍出封閉綠色三角形（11,698 個綠像素）。
+    * `v08`（定稿）：在 Gemini App 對 `v07` 下局部修改指令「把裙擺右下角往左收、與法杖之間留出開放綠色通道」，一次通過檢查（切出 1 格，縮至 96px 後殘留綠色像素 = `0`），同時作為 `reference/style/character_style.png`。
+3. **待機動畫（`cleric_idle_v01`）**：
+    * 附上 `cleric_base_v08.png` 並使用 6.7 節範本，一次通過：`1376×768` 自動切出 4 格（寬 249～258、高 516～523），畫面水平晃動 `0.0px`。
+4. **跑步動畫（`cleric_run_v01`～`v04`）與垂直投影切格的關鍵發現**：
+    * `v01`、`v02`：使用舊版長袍提示詞（`The robe hem swings with each step`），Gemini 畫出大幅向外飛揚的裙擺與披風，導致 4 格水平相連（`find_frames` 只切出 1 格）。且發現**拿已經是 4 個人的失敗圖在同一個 Gemini 對話要求拉開間距時，Gemini 只會重畫細節、不會移動 4 個人的水平位置**。
+    * `v03`：**開全新 Gemini 對話、只附上單人基準圖 `cleric_base_v08.png`**，並在提示詞強制要求「角色高度約 55%、裙擺與披風保持窄直不外飄（compact and narrow silhouette）、每格之間留極寬垂直綠幕通道」。結果第 1～2 格（間距 69px）、第 3～4 格（間距 63px）成功切開，只剩第 2 格最右側的法杖（`x=517`）與第 3 格向後踢的左腳靴跟（`x=518`）在垂直投影上重疊 1 像素。
+    * `v04`（定稿）：對 `v03` 下局部修改指令「只把左起第 3 個角色往後伸的左腳靴子往身體下方收攏」，第 2、3 格之間立刻讓出 36px 寬的垂直通道，完美切出 4 格（寬 200～210、高 403～407），畫面水平晃動僅 `0.5px`。
+5. **`tools/sprites.py` 的同步強化**：
+    * **高飽和度綠幕／洋紅背景自動清除內部封閉孔洞**：當背景色飽和度 `max(bg) - min(bg) > 100` 時，除了邊緣 flood fill 外，角色內部與背景色距離在 `tolerance` 內的像素也一併透明化並做溢色修正（因此跑步時雙腿邁開或手肘彎曲圍出的小綠洞會自動清乾淨，同時不影響 `Pal_test.png` 等灰白背景保留角色內部白色）。
+    * **忽略 1～2px 邊緣壓縮雜訊線**：JPEG 轉檔偶爾在畫布最下緣留下 1px 雜訊線，`find_frames` 自動略過寬或高 ≤ 2px 的細線。
+    * **不同原圖獨立計算縮放倍率**：`idle`（高 523px）與 `run`（高 407px）來自兩張不同原圖時，各自以該張原圖的第 1 格計算縮放倍率，確保打包進 `public/characters/cleric.png`（512×256，全彩 74.1 KB）時待機與跑步在畫面上都是 48px 高。
+
