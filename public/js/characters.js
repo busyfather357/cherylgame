@@ -53,6 +53,11 @@ const CHARACTERS = {
                 "idle": [[67, 24], [67, 24], [67, 22], [67, 22]],
                 "run": [[67, 28], [68, 28], [68, 28], [66, 28]]
             }
+        },
+        "fullBody": {
+            "image": "characters/knight_full.jpg",
+            "width": 512,
+            "height": 768
         }
     }
 };

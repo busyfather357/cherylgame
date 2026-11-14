@@ -1,7 +1,7 @@
 // 觸控操作：浮動搖桿、道具按鈕、遊戲區域與畫面方向 (手機只支援直向、平板只支援橫向)，以及電腦沒有觸控控制鍵 (原 private/test_touch.js)
 // 以頁面中的 PointerEvent (pointerType 'touch') 模擬觸控，遊戲照常以 requestAnimationFrame 執行
 const { test, expect } = require('@playwright/test');
-const { routeSite, watchErrors, gameUrl } = require('./site');
+const { routeSite, watchErrors, startGame } = require('./site');
 
 const DEVICES = [
     { name: 'iPad mini 橫向', size: { width: 1133, height: 744 }, kind: 'tablet' },
@@ -15,7 +15,7 @@ let errors = [];
 test.beforeEach(async ({ page }) => {
     errors = watchErrors(page);
     await routeSite(page);
-    await page.goto(gameUrl('?newgame'));
+    await startGame(page);
     await page.waitForTimeout(500);
     await page.evaluate(() => {
         const canvasEl = document.getElementById('game');

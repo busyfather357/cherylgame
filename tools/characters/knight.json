@@ -5,5 +5,6 @@
         "idle": { "frames": [0, 1, 2, 3], "fps": 6 },
         "run":  { "frames": [4, 5, 6, 7], "fps": 12 }
     },
-    "colors": 64
+    "colors": 64,
+    "fullBody": { "source": "knight_base_v01.png", "tolerance": 50 }
 }

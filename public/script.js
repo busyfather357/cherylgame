@@ -1,5 +1,5 @@
 // 遊戲核心：畫布、地圖、碰撞、出題與答題、道具、選單與主迴圈。
-// 經驗值、貨幣、成就、商店、存檔、題目、章節設定、敵人行為放在 js/ 資料夾，index.html 會先載入它們再載入本檔。
+// 經驗值、貨幣、成就、商店、存檔、題目、章節設定、敵人行為、選角色畫面放在 js/ 資料夾，index.html 會先載入它們再載入本檔。
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
@@ -41,6 +41,7 @@ function resizeCanvas() {
     DPR = window.devicePixelRatio || 1;
     document.body.style.width = W + "px";
     document.body.style.height = H + "px";
+    document.body.style.setProperty("--view-h", H + "px"); // 給 style.css 依畫面高度縮放用 (選角色畫面的角色卡)
     canvas.style.width = W + "px";
     canvas.style.height = H + "px";
     canvas.width = Math.floor(W * DPR);
@@ -81,8 +82,9 @@ const gameConfig = {
 const PLAYER_WIDTH = 50;
 const PLAYER_HEIGHT = 52;
 
-// 玩家角色的精靈圖與動畫 (js/characters.js，由 tools/sprites.py 產生)
-const playerCharacter = CHARACTERS.knight;
+// 玩家角色的精靈圖與動畫設定 (js/characters.js，由 tools/sprites.py 產生)。
+// 由 setPlayerCharacter() 更換：讀檔後換成上次選的角色，之後是選角色畫面 (js/character_select.js) 選到的角色
+let playerCharacter = CHARACTERS[DEFAULT_CHARACTER];
 
 function createEmptyInventory() {
     return Object.fromEntries(ITEM_TYPES.map(item => [item, 0]));
@@ -413,12 +415,23 @@ function checkCollision(rect1, rect2) {
 // --- 4. 載入圖片 ---
 // 角色圖已經由 tools/sprites.py 去背、對齊、縮放，載入後直接使用 (private/doc/character_pipeline.md)
 const sprite = new Image();
-sprite.src = playerCharacter.sheet;
 
 let spriteLoaded = false;
 sprite.onload = () => {
     spriteLoaded = true;
 };
+
+// 更換玩家角色。只換精靈圖與動畫設定：玩家方塊、碰撞範圍、速度都跟角色無關。id 不存在時用預設角色
+function setPlayerCharacter(id) {
+    const character = CHARACTERS[isCharacterId(id) ? id : DEFAULT_CHARACTER];
+    if (character === playerCharacter && sprite.src) return;
+    playerCharacter = character;
+    gameState.action = "idle"; // 每個角色的動畫格數不一定相同，從第 1 格重新播放
+    gameState.index = 0;
+    spriteLoaded = false;      // 新的圖載入完成之前不畫角色
+    sprite.src = character.sheet;
+}
+setPlayerCharacter(profile.character); // 上次選的角色 (loadProgress() 已經讀好存檔)
 
 // --- 5. 遊戲主迴圈 ---
 function update(timestamp) {
@@ -1024,8 +1037,12 @@ function checkAnswer(selected, correct, op) {
 
 updateHUD(); // Initialize HUD
 
-// 歡迎回來視窗會用到上方以 let 宣告的 HUD 快取與 isAnswering，必須放在這裡而不是 loadProgress() 旁邊
-// 第 1 關的存檔等同新遊戲，直接開始
-if (gameState.level > 1) showWelcomeBack();
+// 每次開啟遊戲先選角色 (js/character_select.js)，選好之後：
+// 第 2 關以後的存檔顯示歡迎回來，讓玩家選擇繼續或從頭開始；第 1 關的存檔等同新遊戲，直接開始。
+// 這些視窗會用到上方以 let 宣告的 HUD 快取與 isAnswering，必須放在這裡而不是 loadProgress() 旁邊
+showCharacterSelect(() => {
+    if (gameState.level > 1) showWelcomeBack();
+    else resumeGame();
+});
 
 requestAnimationFrame(loop);
