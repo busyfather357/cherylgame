@@ -61,8 +61,9 @@ cherylgame/
 │       ├── system_architecture.md  # 設計：本系統架構與設計文件
 │       ├── character_pipeline.md   # SOP：角色轉檔流程 (原圖 → 精靈圖與全身圖，tools/sprites.py)
 │       ├── art_guide.md            # SOP：美術素材生成規範，給 Google Antigravity 的畫圖規則與提示詞範本 (見 9.7)
-│       └── lessons_learned.md      # 經驗紀錄：實測數據、踩過的坑、每次改版的驗證結果
-├── reference/                  # 不進 git、不部署：參考素材 (AI 生成的原圖等)，正本在 Google Drive 的對照資料夾 (見 9.7)；角色原圖在 reference/characters/<id>/，背景原圖在 reference/backgrounds/<id>/
+│       ├── lessons_learned.md      # 經驗紀錄：實測數據、踩過的坑、每次改版的驗證結果
+│       └── <characters|backgrounds>/<id>/  # 各素材的需求單 brief.md 與生圖紀錄 log.md
+├── reference/                  # 不進 git、不部署：參考素材 (AI 生成的原圖等，僅放圖片)，正本在 Google Drive (Folder ID 見 AGENTS.md)；角色原圖在 reference/characters/<id>/，背景原圖在 reference/backgrounds/<id>/
 ├── .github/
 │   └── pull_request_template.md    # PR 說明的固定段落 (AGENTS.md 的「Git 與 PR 流程」)
 ├── AGENTS.md                   # 給 AI Agent 的工作指引 (執行環境、文件地圖、程式慣例、開發工具、Git 與 PR 流程)
@@ -586,23 +587,22 @@ cherylgame/
 
 ### 9.6 角色精靈圖 (`tools/sprites.py`)
 2026-11-01 加入。格式與轉檔步驟見 [`character_pipeline.md`](character_pipeline.md)；原圖怎麼畫見 [`art_guide.md`](art_guide.md)（9.7）；當初的方案比較見 [`lessons_learned.md`](lessons_learned.md) 1.2。
-* 輸入：設定檔 `tools/characters/<id>.json`（進 git）＋原圖 `reference/characters/<id>/`（正本在 Google Drive，不進 git，見 9.7）。設定檔欄位說明在 `tools/sprites.py` 開頭。
+* 輸入：設定檔 `tools/characters/<id>.json`（進 git）＋原圖 `reference/characters/<id>/`（僅放圖片，正本在 Google Drive，不進 git，見 9.7）。設定檔欄位說明在 `tools/sprites.py` 開頭。
 * 輸出：`public/characters/<id>.png`、全身圖 `public/characters/<id>_full.jpg`（設定檔有 `fullBody` 時）、`public/js/characters.js`（所有角色），以及 `tools/work/sprites/<id>/` 的預覽圖 `preview.png`（兩種地板、碰撞範圍、腳底與頭頂掛點）、各動畫的 GIF、報告 `report.txt`（切出的每一格在原圖的位置、晃動量、檔案大小）。
-* 先處理完所有指定的角色，全部成功才寫檔。`--check` 重新處理一次並逐像素比較，原圖不在本機的角色略過（雲端 agent 的環境沒有原圖）。
+* 先處理完所有指定的角色，全部成功才寫檔。`--check` 重新處理一次並逐像素比較，原圖不在本機的角色略過（Claude Code 或沒有 Drive 原圖的環境會略過）。
 * 全身圖（2026-11-13）：
     * 原圖去背後取最大的一塊當角色，等比例縮放到 512×768 的畫面裡（四周留 6%），左右置中、腳底貼齊下方的留白線，鋪上底色後存成 JPEG（品質 85、色度不抽樣、漸進式）。
     * 全身圖只縮小 2～3 倍，精靈圖用的去背留下的幾像素綠邊會看得出來，所以多一道去邊 `clean_edges()`：由外往內最多剝 8 圈還帶著背景色的像素，再對邊緣 16 圈做溢色修正。只處理綠幕、洋紅背景。
-    * `--full-body <id>` 只重建全身圖與 `characters.js` 的 `fullBody`，不讀動畫的原圖、不動精靈圖。雲端 agent 的環境讀不到 Drive，通常只拿得到維護者在對話中重新附上的那一張定稿。
+    * `--full-body <id>` 只重建全身圖與 `characters.js` 的 `fullBody`，不讀動畫的原圖、不動精靈圖。Claude Code 讀不到 Drive，需要原圖時由維護者在對話中附上定稿圖。
     * `--check` 對全身圖不是逐位元組比較：大小相同，而且色差超過 8 的像素不到千分之一就算一致（JPEG 是有損壓縮，不同作業系統的結果可能有極小的差異）。設定檔沒有 `fullBody` 但圖還在、或圖沒有對應的設定檔，也會列出來。
 * 每次轉檔與測試的實測數據：[`lessons_learned.md`](lessons_learned.md) 1.6、1.7、5.3。
 
 ### 9.7 美術素材的分工與交接
-2026-11-12 起。Jules 已停用，改用 Google Antigravity；它能直接讀寫 Google Drive，也能生圖。維護者決定：
-* **Antigravity 負責畫圖與檢查**（撰寫提示詞、用 `tools/sprites.py` 檢查、歸檔至 Google Drive），亦可搭配**維護者的 Gemini App** 生圖並貼回對話視窗以避開內建 `generate_image` 的配額限制（每 5 小時 2～3 張）。畫圖的規則、提示詞範本、核可流程在 [`art_guide.md`](art_guide.md)（取代 2026-11-01 寫在 `character_pipeline.md` 的第一版生圖規範，差異見 [`lessons_learned.md`](lessons_learned.md) 1.4）。
-* **Google Drive 的 `Antigravity_Data/cherylgame/` 對照 repo 的根目錄，資料夾結構完全相同**（維護者的電腦上是 `G:\我的雲端硬碟\Antigravity_Data\cherylgame\`）。git 管程式、設定、文件；Drive 放不適合進 git 的大型檔案：GitHub 的空間有限、刪除後仍留在歷史裡，Drive 空間大、刪除就能釋出。
-    * `reference/` 整個以 Drive 為正本：`reference/characters/<id>/`、`reference/backgrounds/<id>/` 放定稿，各自的 `drafts/` 放所有候選圖，`reference/style/` 放畫風基準圖（`character_style.png` 已放入核可的 `cleric_base_v08.png`）。
-    * `tools/config.py`：`DRIVE_DIR` 預設是上面的掛載位置（環境變數 `CHERYLGAME_DRIVE_DIR` 可以改）；`pick_reference_dir()` 在 Drive 上有 `reference/` 時回傳它，否則回傳 repo 裡的 `reference/`（Drive 沒掛載、雲端 agent 的環境）。工具直接讀 Drive，不用複製。報告裡 Drive 上的檔案顯示成 `Drive:<相對路徑>`。
-    * Drive 上另外只放 `private/doc/art_guide.md` 的副本給美術 agent 讀；程式與其他文件不備份到 Drive。
+2026-11-12 起。Jules 已停用，改用 Google Antigravity；它能直接讀寫自己建立的 Google Drive 檔案，也能生圖。維護者決定：
+* **Antigravity 負責畫圖與檢查**（撰寫提示詞、用 `tools/sprites.py` 檢查、依 `AGENTS.md` 登記的 Folder ID 歸檔至 Google Drive），亦可搭配**維護者的 Gemini App** 生圖並貼回對話視窗以避開內建 `generate_image` 的配額限制（每 5 小時 2～3 張）。畫圖的規則、提示詞範本、核可流程在 [`art_guide.md`](art_guide.md)（取代 2026-11-01 寫在 `character_pipeline.md` 的第一版生圖規範，差異見 [`lessons_learned.md`](lessons_learned.md) 1.4）。
+* **GitHub 管程式、設定與所有 `.md` 文件；Drive 只留 `reference/` 圖片資產**：GitHub 的空間有限、刪除後仍留在歷史裡，Drive 空間大、刪除就能釋出；因此大型圖片原圖放 Drive，而 `art_guide.md`、`brief.md`、`log.md` 等純文字文件統一放在 GitHub repo（`private/doc/`），不在 Drive 放 `private/` 或文件副本（2026-11-13 起，原因見 [`lessons_learned.md`](lessons_learned.md) 6.3）。
+    * `reference/` 只放圖片：`reference/characters/<id>/`、`reference/backgrounds/<id>/` 放定稿圖片，各自的 `drafts/` 放候選圖片，`reference/style/` 放畫風基準圖（`character_style.png` 已放入核可的 `cleric_base_v08.png`）。所有 Drive 資料夾一律從 `AGENTS.md` 登錄的 `FOLDER_ID` 進入，不憑名稱猜位置。
+    * 維護者本機的 `G:\我的雲端硬碟\Antigravity_Data\cherylgame\` 僅作唯讀讀取（供維護者手動執行 `tools/sprites.py` 時透過 [`tools/config.py`](../../tools/config.py) 讀取 `reference/`），不在 `G:\` 手動建資料夾或放檔案；Claude Code 無法存取 Antigravity 建立的 Drive 檔案（本機與雲端皆然）。
 * `art_guide.md` 的技術規則是從 `tools/sprites.py` 的處理方式推出來的（從圖的邊緣去背、以最下緣當腳底、以垂直投影空白帶切格等）。工具的行為改變時要同步修改它。
 * 第一個新角色 `cleric`（牧師）的生圖與轉檔經過（2026-11-12～11-13）：[`lessons_learned.md`](lessons_learned.md) 1.6、1.7。
 * 尚未處理（彙整在 [`work_plan.md`](work_plan.md) 第 4 節）：
@@ -611,5 +611,5 @@ cherylgame/
 ### 9.8 執行環境與交付（2026-11-13）
 * agent 可能在兩種環境執行：維護者的電腦（本機），或雲端的容器／VM（Google Antigravity、claude.ai/code 的 Claude Code 雲端工作階段）。能不能改 git 狀態、能不能安裝，依環境而定，規則在 `AGENTS.md` 的「執行環境」。
 * 雲端 agent 的交付方式是 PR：步驟在 `AGENTS.md` 的「Git 與 PR 流程」，PR 說明的固定段落在 `.github/pull_request_template.md`。`main` 是正式網站的來源，只有維護者合併。
-* 雲端環境讀不到 Google Drive：沒有 `reference/` 的原圖，`--check` 會略過讀不到原圖的角色。需要原圖時由維護者在對話中附上；先確認它是 Drive 上的哪一個檔案，照那個檔名使用。確定是 Drive 上還沒有的新圖，才在 PR 的「合併後維護者要做的事」請維護者放到 Drive。
-* 為什麼需要這一節：[`lessons_learned.md`](lessons_learned.md) 6.1。
+* Claude Code（本機與雲端皆然）無法存取 Antigravity 建立的 Google Drive 檔案，因此一律以 GitHub repo 的 `.md` 與程式碼確認資訊，沒有 `reference/` 的原圖時 `--check` 會略過；需要原圖時由維護者在對話中附上，先確認它是 Drive 上的哪一個檔案再照那個檔名使用。確定是 Drive 上還沒有的新圖，才請維護者交給 Antigravity 上傳到 Drive。
+* 為什麼需要這一節：[`lessons_learned.md`](lessons_learned.md) 6.1、6.3。

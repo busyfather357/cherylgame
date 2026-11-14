@@ -9,27 +9,28 @@
 ## 1. 總覽
 
 ```text
-需求單 brief.md ─→ 畫圖 (art_guide.md) ─→ 維護者核可，定稿放 reference/characters/<id>/
-                                                        │
+需求單 brief.md (repo) ─→ 畫圖 (art_guide.md) ─→ 維護者核可，定稿放 Drive reference/characters/<id>/
+                                                                    │
 設定檔 tools/characters/<id>.json ─→ python -m tools.sprites <id> ─→ 看預覽與報告
-                                                        │
+                                                                    │
           public/characters/<id>.png、<id>_full.jpg、public/js/characters.js ─→ 測試 ─→ PR
 ```
 
 | 東西 | 位置 | 進 git | 誰負責 |
 |---|---|---|---|
-| 原圖（定稿與候選） | `reference/characters/<id>/`，正本在 Google Drive | 否 | Antigravity 畫、維護者核可 |
+| 需求單與生圖紀錄 | `private/doc/characters/<id>/brief.md`、`log.md` | 是 | 維護者／Claude Code 寫 `brief.md`，Antigravity 寫 `log.md` |
+| 原圖（定稿與候選） | `reference/characters/<id>/`，正本在 Google Drive（僅放圖片） | 否 | Antigravity 畫並上傳，維護者核可 |
 | 角色設定檔 | `tools/characters/<id>.json` | 是 | 做轉檔的 agent |
 | 工具 | `tools/sprites.py`、`tools/config.py`、`tools/tests/` | 是 | Claude Code |
 | 精靈圖、全身圖、角色設定 | `public/characters/<id>.png`、`<id>_full.jpg`、`public/js/characters.js` | 是（會部署） | 工具產生，**不手動修改** |
 | 預覽與報告 | `tools/work/sprites/<id>/` | 否 | 工具產生 |
 
 * 工具只用 Pillow 12.3.0（系統 Python 已安裝的，不建 venv、不另外安裝），不連網。產出以這個版本為準。
-* 工具讀原圖的位置：Drive 有掛載時直接讀 Drive 的 `reference/`，否則讀 repo 裡的 `reference/`（`tools/config.py`）。雲端環境讀不到 Drive：只拿得到維護者在對話中附上的圖。**先問清楚那張圖是 Drive 上的哪一個檔案**（通常就是已經核可的定稿，維護者只是重新傳一次），照 Drive 上的檔名放進 repo 裡的 `reference/characters/<id>/`（不進 git）再建置；確定是 Drive 上還沒有的新圖時，才在 PR 請維護者放到 Drive。
+* **Claude Code 無法讀取 Antigravity 建立的 Drive 檔案（本機與雲端皆然）**：`tools/config.py` 在維護者本機手動執行時可直接讀 `G:\`（本機 Drive 僅唯讀）；Claude Code 與雲端環境都讀不到 Drive，只能以 repo 裡的 `.md`（含 `private/doc/characters/<id>/log.md`）確認定稿檔名，需要原圖轉檔或檢查時請維護者在對話中附上那張圖。**先問清楚那張圖是 Drive 上的哪一個檔案**（通常就是已經核可的定稿，維護者只是重新傳一次），照 Drive 上的檔名放進本機／容器裡的 `reference/characters/<id>/`（不進 git）再建置；確定是 Drive 上還沒有的新圖時，才請維護者交給 Antigravity 上傳到 Drive（Folder ID 見 `AGENTS.md`）。
 
 ## 2. 新增或更新一個角色（步驟）
 
-1. **確認原圖已經定稿**：`reference/characters/<id>/` 那一層有核可的 `<id>_base_vNN.png`、`<id>_idle_vNN.png`、`<id>_run_vNN.png`（`art_guide.md` 第 3、4 節）。`<id>` 用英文小寫，定了就不要改。
+1. **確認原圖已經定稿**：在 `private/doc/characters/<id>/log.md` 與 Drive 的 `reference/characters/<id>/` 確認有核可的 `<id>_base_vNN.png`、`<id>_idle_vNN.png`、`<id>_run_vNN.png`（`art_guide.md` 第 3、4 節）。`<id>` 用英文小寫，定了就不要改。
 2. **設定檔**：新角色複製 `tools/characters/cleric.json` 成 `tools/characters/<id>.json`，改 `name` 與各個 `source`（檔名含版本號；換定稿時檔名會變，要跟著改）。欄位說明在 `tools/sprites.py` 開頭。
     * 待機與跑步各一張原圖（`art_guide.md` 的做法）：兩個動畫各自加上 `"source"`，`frames` 都填 `[0, 1, 2, 3]`；最上層的 `source` 填待機那張。
     * 兩個動畫畫在同一張圖（4 欄 × 2 排）：`frames` 填 `[0, 1, 2, 3]`、`[4, 5, 6, 7]`。

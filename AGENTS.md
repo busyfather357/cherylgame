@@ -16,7 +16,7 @@
 | 工作目錄 | 維護者直接看得到，會自己檢查 diff | 暫時的，工作階段結束就消失，維護者看不到 |
 | git | **不改 git 狀態**：只改檔案，由維護者 commit | **用 PR 交付**：在自己的分支 commit、push、開 PR（見「Git 與 PR 流程」） |
 | 安裝 | **不自行安裝**：把指令交給維護者 | 可以照 lock 檔安裝 `tools/` 的套件（見「開發工具」） |
-| Google Drive 的 `reference/` | 讀得到 | Antigravity 讀得到自己上傳的檔案；Claude Code 讀不到，需要時請維護者在對話中附上那張圖 |
+| Google Drive 的 `reference/` | **維護者本人**讀得到（`G:\` 僅作唯讀）；**Claude Code 讀不到** Antigravity 建立的檔案（本機與雲端皆然） | Antigravity 讀得到自己上傳的檔案；**Claude Code 讀不到**，一律以 repo 的 `.md` 為主，需要圖片時請維護者在對話中附上 |
 
 * 同一個 agent 在兩種環境的規則不同：Claude Code 在維護者的電腦上是本機，在 claude.ai/code 的雲端工作階段是雲端。
 * 分不出來時當成本機，並詢問維護者。
@@ -152,22 +152,33 @@ npm --prefix tools ci
 4. **Commit**：訊息是 `<類型>(<範圍>): <中文摘要>`，例如 `feat(character): 新增牧師的全身圖`；內文寫為什麼改、改了什麼。類型：`feat` 新功能、`fix` 修正、`docs` 文件、`tools` 開發工具、`art` 只有美術產出、`refactor` 不改行為的整理。工具產出的檔案（`public/characters/`、`public/js/characters.js`）跟造成它改變的設定檔放在同一個 commit。
 5. **Push** 到自己的分支。
 6. **開 PR**，base 是 `main`。標題跟 commit 訊息同一個格式；說明照 [`.github/pull_request_template.md`](.github/pull_request_template.md) 的段落填：摘要、改了什麼、驗證、合併後維護者要做的事、待決定的事。
-    * 「合併後維護者要做的事」寫 agent 做不到、但不做就不完整的事：把改過的 `art_guide.md` 複製到 Drive、在本機用 Drive 上的原圖執行 `--check`、在實機上測試等。
+    * 「合併後維護者要做的事」寫 agent 做不到、但不做就不完整的事：把新原圖傳給 Antigravity 上傳到 Drive、在本機用 Drive 上的原圖執行 `--check`、在實機上測試等。
 7. **回報**：把 PR 的連結與「合併後維護者要做的事」告訴維護者。審查意見的修改 push 到同一個分支，不另外開 PR。
 8. **合併之後**的下一件工作，從最新的 `main` 重新開分支，不要接著已經合併的分支繼續做。
 
 ## Google Drive 對照資料夾
-* Google Drive 的 `Antigravity_Data/cherylgame/` **對照 repo 的根目錄**，資料夾結構跟 repo 完全相同：同一個相對路徑在兩邊是同一個東西。維護者的電腦上 Drive 掛載在 `G:\我的雲端硬碟\`，所以它是 `G:\我的雲端硬碟\Antigravity_Data\cherylgame\`。新增要放 Drive 的東西時照 repo 的路徑放，不要另外發明結構。
-* 分工：**git 管程式、設定、文件；Drive 放不適合進 git 的大型檔案**。GitHub 的空間有限，檔案刪除後仍留在歷史裡；Drive 空間大，刪除就能釋出。
-* **`reference/` 整個以 Drive 為正本**（`.gitignore` 排除它）。`tools/config.py` 的 `REFERENCE_DIR` 在 Drive 有掛載時直接讀 Drive 的 `reference/`，讀不到才用 repo 裡的 `reference/`；位置可以用環境變數 `CHERYLGAME_DRIVE_DIR` 改。repo 裡不需要另外留一份。
-* 除了 `reference/`，Drive 上只放美術 agent 需要讀的文件副本（目前是 `private/doc/art_guide.md`）；正本在 git，修改後複製過去。程式與其他文件不要備份到 Drive（已經有 git）。
-* Claude Code 在 Drive 上：可以讀 `reference/`、更新文件副本、寫需求單 `brief.md`；**美術 agent 產生的圖與紀錄不修改、不刪除**，`Antigravity_Data/` 底下其他專案的資料夾不要碰。
+* **分工（Drive 只留 `reference/` 圖片）**：**GitHub repo 放所有程式、設定與 `.md` 文件**（包含 [`art_guide.md`](private/doc/art_guide.md)、需求單 `brief.md` 與生圖紀錄 `log.md`，統一放在 `private/doc/`）；**Google Drive 只放不適合進 git 的大型圖片素材 `reference/`**（原圖、候選圖、畫風基準圖），**不在 Drive 放 `private/`、文件副本或 `.md`**，避免不同步與同名混淆。
+* **`reference/` 整個以 Drive 為正本**（`.gitignore` 排除它）。維護者本機的 Drive 掛載在 `G:\我的雲端硬碟\Antigravity_Data\cherylgame\`，[`tools/config.py`](tools/config.py) 的 `REFERENCE_DIR` 在維護者本機執行時可直接讀 Drive 的 `reference/`（位置可用 `CHERYLGAME_DRIVE_DIR` 改），讀不到時改讀 repo 裡的 `reference/`。
+* **權限邊界與「本機唯讀」規範**（實測見 [`lessons_learned.md`](private/doc/lessons_learned.md) 6.3）：
+    * **單一建立者（維護者本機 `G:\` 唯讀）**：Antigravity 的 `gdrive` 外掛權限為 `drive.file`，只能看到「同一個 `gdrive` 外掛自己建立與上傳」的項目；維護者從本機 `G:\`、網頁版或他處手動建的資料夾與檔案，Antigravity **完全看不到**，會導致重複建立同名資料夾。因此維護者的本機 `G:\` **僅作唯讀讀取**（跑 `tools/sprites.py` 用），**不要在 `G:\` 或 Drive 網頁版直接新建資料夾或放入檔案**；所有需放入 `reference/` 的圖片一律透過對話傳給 Antigravity，由 Antigravity 以 `gdrive` CLI 上傳。
+    * **Claude Code 無法存取 Antigravity 建立的 Drive 檔案（本機與雲端皆然）**：實測不僅雲端環境讀不到，在本機電腦透過桌機版 Google Drive（`G:\`）時，Claude Code 也讀不到 Antigravity 建立的檔案（只有維護者本人看得到）。因此 **Claude Code 一律以 GitHub repo 的 `.md` 與程式碼確認資訊**；需要原圖執行轉檔或檢查時，請維護者在對話中附上圖片。
+* **Folder ID 登錄表（唯一絕對定位，禁止只憑名稱定位）**：Google Drive 的資料夾名稱不是絕對路徑，同一層可重複存在同名或近似名稱（如 `Antigravity_data` vs `Antigravity_Data`、`private` 重複）。**Antigravity 操作 Drive 一律從下面登記的 `FOLDER_ID` 進入，嚴禁對既有層級重新 `mkdir` 或只靠全域名稱搜尋**；更新既有檔案先查 `fileId` 改用 `gdrive mutate update <FILE_ID>`（不要用 `upload` 產生同名複本）；新增子資料夾（如新角色 `<id>`、`drafts`、`backgrounds`）前必須先執行 `gdrive readonly ls <PARENT_ID>` 確認不存在同名資料夾，建完後於同一個 PR 把新 ID 補進下表。`Antigravity_Data/` 底下其他專案的資料夾不要碰。
+
+| 相對路徑 | Google Drive Folder ID | 備註 |
+|---|---|---|
+| `Antigravity_Data/` | `1XtX-DHk23zyodd68QmI7TByR9RX2YOwp` | Antigravity 專案共用根目錄（含其他專案，勿更動非本專案資料夾） |
+| `Antigravity_Data/cherylgame/` | `1mDMqvTSIlYyFxOgY8COfvKfeEpnTvzwC` | 本專案對照根目錄（底下只保留 `reference/`） |
+| `reference/` | `1Zx2x3fI-blt2T4Kb_oT3Ux6YHu-d8W-t` | 大型圖片正本根目錄 |
+| `reference/style/` | `1CCyQSRAv6ZqP_5jDD9mkY2SFL3IRHFEz` | 畫風基準圖（`character_style.png`） |
+| `reference/characters/` | `10po2Twn2xqPuBCoqrfayzauhAmuxz145` | 角色原圖總目錄 |
+| `reference/characters/cleric/` | `1sSI_6ws5rsygalfxIs_Pbs7AwfOXNQcB` | 牧師定稿圖層 |
+| `reference/characters/cleric/drafts/` | `1zN8Qz_D7KJ1QgbTThf0bH03phIP5mOTB` | 牧師候選圖層 |
 
 ## 美術素材
 * 分工（2026-11-12 起）：**Google Antigravity 負責畫圖**（角色、背景的原圖），**Claude Code 負責程式與轉檔**（原圖 → 遊戲用的檔案）。Jules 已停用。
-* 每個角色做到哪一步、接下來要畫誰：[`private/doc/work_plan.md`](private/doc/work_plan.md) 第 2 節。美術的工作以需求單 `brief.md` 交接（`art_guide.md` 9.1），畫完或核可後更新總表。
-* 畫圖的規則、提示詞範本、資料夾與檔名、核可流程都在 [`private/doc/art_guide.md`](private/doc/art_guide.md)。這份文件要能單獨閱讀（Antigravity 讀的是 Drive 上同一個路徑的副本）；修改後提高文件開頭的規範版本，並把新版複製到 Drive。
-* **維護者在對話中附上圖時，先確認它是什麼**：通常是 Drive 上已經核可的定稿（因為 agent 讀不到 Drive 才重新傳一次），不是新的原圖。問清楚它對應 Drive 上的哪一個檔案，照那個檔名使用；不要自己取檔名，也不要因此新增素材的種類或步驟。
+* 每個角色做到哪一步、接下來要畫誰：[`private/doc/work_plan.md`](private/doc/work_plan.md) 第 2 節。美術的工作以 repo 內的需求單 `private/doc/<characters|backgrounds>/<id>/brief.md` 交接（`art_guide.md` 9.1），畫完或核可後在 `private/doc/` 更新 `log.md` 與總表。
+* 畫圖的規則、提示詞範本、Drive Folder ID 規範與核可流程都在 [`private/doc/art_guide.md`](private/doc/art_guide.md)（正本只放 GitHub repo，不另外複製到 Drive）。
+* **維護者在對話中附上圖時，先確認它是什麼**：通常是 Drive 上已經核可的定稿（因為 Claude Code 讀不到 Drive 才重新傳一次），不是新的原圖。問清楚它對應 Drive 上的哪一個檔案，照那個檔名使用；不要自己取檔名，也不要因此新增素材的種類或步驟。
 * 美術 agent 生成的圖先放 `reference/<characters|backgrounds>/<id>/drafts/`，維護者核可的定稿複製到上一層 `reference/<characters|backgrounds>/<id>/`；轉檔工具只讀定稿那一層。
 * 美術 agent 只交原圖：不去背、不裁切、不縮放，也不寫入 repo 的 `public/`。去背、切格、對齊、縮放、壓縮都由 `tools/` 的工具在建置時完成。
 * 原圖不符合規則（留下綠邊、切格錯誤、動作不連貫）時回報並重畫，不要手動修圖；規則不夠清楚就修改 `art_guide.md`。

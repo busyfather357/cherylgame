@@ -22,9 +22,9 @@
 
 | 順序 | 工作 | 負責 | 前置條件 |
 |---|---|---|---|
-| 1 | 把 `art_guide.md` v4 複製到 Drive；在本機執行 `python -m tools.sprites --check`，確認牧師的全身圖找得到原圖（2.2） | 維 | 全身圖的 PR 合併 |
+| 1 | 在 Drive 手動刪除本機建的重複 `private/`（以及視需要清掉本機建的 `reference/characters/knight/`）；在本機執行 `python -m tools.sprites --check`，確認牧師的全身圖找得到原圖（2.2） | 維 | 本 PR（`docs/drive-id-and-github-md`）合併 |
 | 2 | 重畫騎士（範圍見 2.2） | 維 | — |
-| 3 | 決定遊俠、戰士的外觀，寫需求單 `brief.md` | 維 | — |
+| 3 | 決定遊俠、戰士的外觀，在 repo 建立需求單 `private/doc/characters/<id>/brief.md` | 維 | — |
 | 4 | 遊俠、戰士的基準立繪 → 待機 → 跑步（全身圖由基準立繪轉出，不用另外畫） | AG、維 | 第 3 項 |
 | 5 | 選角色介面的設計與實作（第 3 節） | AG 規劃中、CC | 至少兩個角色的全身圖 |
 
@@ -32,12 +32,12 @@
 
 ### 2.1 總表
 
-美術的每一步照 `art_guide.md` 4.1，定稿放 Drive 的 `reference/characters/<id>/`；轉檔照 `character_pipeline.md` 第 2 節。
+美術的每一步照 `art_guide.md` 4.1，圖片定稿依 `AGENTS.md` 登記的 Folder ID 放 Drive 的 `reference/characters/<id>/`；需求單與生圖紀錄放 repo 的 `private/doc/characters/<id>/`；轉檔照 `character_pipeline.md` 第 2 節。
 
 | 角色 | `id` | 需求單 | 基準立繪 `base` | 待機 `idle` | 跑步 `run` | 設定檔 | 精靈圖 | 全身圖 | 遊戲裡可以選 |
 |---|---|---|---|---|---|---|---|---|---|
 | 騎士 | `knight` | ⬜ | 🔄 待重畫 | 🔄 待重畫 | 🔄 待重畫 | ✅ | ✅ 舊畫風 12.8 KB | ⬜ 等基準立繪 | ✅ 目前唯一的角色 |
-| 牧師 | `cleric` | ❓ | ✅ `v08` | ✅ `v01` | ✅ `v04` | ✅ | ✅ 74.1 KB | ✅ 53.4 KB | ⬜ 等選角色介面 |
+| 牧師 | `cleric` | —（對話指示，見 `log.md`） | ✅ `v08` | ✅ `v01` | ✅ `v04` | ✅ | ✅ 74.1 KB | ✅ 53.4 KB | ⬜ 等選角色介面 |
 | 遊俠（弓箭手） | `ranger`（暫定） | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | 戰士 | `warrior`（暫定） | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 
@@ -49,18 +49,17 @@
 
 **騎士 `knight`**
 
-* 現在的精靈圖來自改版前的 `Pal_test.png`：像素風、每格約 224 像素高，跟牧師的奇幻動漫畫風（等級 D）不一樣；沒有基準立繪，所以也做不出全身圖。
+* 現在的精靈圖來自改版前的 `Pal_test.png`：像素風、每格約 224 像素高，跟牧師的奇幻動漫畫風（等級 D）不一樣；沒有基準立繪，所以也做不出全身圖。另外 Drive 上原本由本機放入的 `reference/characters/knight/` 對 Antigravity 不可見，之後重畫騎士時須先清理本機建的 `knight/` 資料夾，由 Antigravity 透過 `gdrive` 建資料夾與上傳（並補上 Folder ID 到 `AGENTS.md`）。
 * 維護者要重畫（2026-11-13）。**範圍待確認**：只畫基準立繪（拿來做全身圖），還是待機、跑步也一起改成等級 D。全部重畫的話，新的定稿用 `knight_base_vNN.png` 等檔名，設定檔的 `source` 改指新圖、拿掉 `colors`，重建後精靈圖會整張換掉。
 * 重畫完成之前不要動 `public/characters/knight.png`：在 Linux 上重建會跟現有的差幾個像素（`lessons_learned.md` 6.1）。
 
 **牧師 `cleric`**
 
 * 全身圖用的是已經核可的定稿圖（維護者 2026-11-13 在對話中重新提供，Drive 上本來就有，**不用再上傳**）。
-* 待辦（維）：確認設定檔的檔名。`tools/characters/cleric.json` 的 `fullBody.source` 填的是文件記載的定稿檔名 `cleric_base_v08.png`，做這件事的雲端環境看不到 Drive。在本機執行 `python -m tools.sprites --check`：顯示「略過 cleric：找不到原圖」就是檔名不對，把 `source` 改成 Drive 上那張定稿的檔名；顯示全身圖不一致就執行 `python -m tools.sprites cleric` 重建。
-* 待辦（AG 或維）：`art_guide.md` 寫的牧師跟定稿不一樣。6.10 的範例提示詞是栗色長髮、金色翼杖、面向右；定稿是銀灰色頭髮、木頭法杖、正面 3/4 視角（`lessons_learned.md` 1.8）。以 Drive 上 `log.md` 的 CHARACTER 區塊為準更正 6.10，之後畫造型變化才不會畫成另一個人。
+* 待辦（維）：本機執行 `python -m tools.sprites --check` 確認全身圖產出一致。Antigravity 已於 Drive（`1sSI_6ws5rsygalfxIs_Pbs7AwfOXNQcB`）確認定稿檔名確實為 `cleric_base_v08.png`、`cleric_idle_v01.png`、`cleric_run_v04.png`，與 `tools/characters/cleric.json` 一致；若本機 `--check` 顯示全身圖不一致再執行 `python -m tools.sprites cleric` 重建。
+* 待辦（AG 或維）：`art_guide.md` 寫的牧師跟定稿不一樣。6.10 的範例提示詞是栗色長髮、金色翼杖、面向右；定稿是銀灰色頭髮、木頭法杖、正面 3/4 視角（`lessons_learned.md` 1.8）。`log.md` 已遷回 repo 的 [`private/doc/characters/cleric/log.md`](characters/cleric/log.md)（其中 `log.md` 頂端的 `CHARACTER` 區塊仍是早期棕髮草稿文字，而 `cleric_idle_v01.png` 提示詞已改為銀灰髮、木頭法杖），待一併更正 `log.md` 頂端與 `art_guide.md` 6.10，之後畫造型變化才不會畫成另一個人。
 * 之後做配件時要注意：定稿的法杖高過頭頂，牧師的頭頂掛點實際上在法杖頂端的高度（`lessons_learned.md` 1.8）。
-* 待辦（CC，需要 Drive 上的原圖）：精靈圖有 10 個綠色殘留的像素，在靴子附近（`lessons_learned.md` 1.8）。遊戲裡的大小幾乎看不出來，優先度低。
-* 需求單 `brief.md` 與生圖紀錄 `log.md` 在 Drive，這個 repo 看不到。
+* 待辦（CC，需要原圖時請維護者在對話中提供）：精靈圖有 10 個綠色殘留的像素，在靴子附近（`lessons_learned.md` 1.8）。遊戲裡的大小幾乎看不出來，優先度低。
 
 **遊俠（弓箭手）`ranger`**、**戰士 `warrior`**
 
@@ -96,8 +95,8 @@
 
 | 工作 | 狀態 | 負責 | 說明 |
 |---|---|---|---|
-| `art_guide.md` v4 複製到 Drive | ⬜ | 維 | v4 加了全身圖的說明（6.11：用的就是基準立繪）與基準立繪的檢查項目，實測紀錄搬到 `lessons_learned.md` |
-| `art_guide.md` 6.10 的牧師範例跟定稿不符 | ⬜ | AG、維 | 見 2.2 |
+| `art_guide.md` v4 複製到 Drive | ✅ 改由單一正本取代（2026-11-13） | — | 不再在 Drive 放 `private/` 與 `art_guide.md` 副本；所有 `.md`（含 `brief.md`、`log.md`）統一放 GitHub repo，Drive 只留 `reference/` 圖片並以 Folder ID 定位 |
+| `art_guide.md` 6.10 的牧師範例跟定稿不符 | ⬜ | AG、維 | 見 2.2（`log.md` 頂端 `CHARACTER` 區塊需一併對齊） |
 | 精靈圖的 `--check` 跨作業系統會誤報 | ⬜ | CC | 全身圖已經改成容許極小的差異；精靈圖還是逐像素比較（`lessons_learned.md` 6.1）。要不要比照處理待決定 |
 | 背景圖的轉檔工具 | ⬜ | CC | 縮成 1600×1600、WebP、200 KB 以內，目前手動（`system_architecture.md` 9.7） |
 | 靜態立繪的程式動畫 | ⬜ | CC | 只有基準立繪、沒有動畫的角色目前是靜止的（`character_pipeline.md` 第 2 節） |
@@ -121,6 +120,7 @@
 | 2026-11-13 | 每個角色除了精靈圖還要有一張全身圖，格式是 JPEG；原圖用核可的定稿（基準立繪），不另外畫 | `character_pipeline.md` 3.1；`art_guide.md` 6.11 |
 | 2026-11-13 | 之後要加入遊俠（弓箭手）與戰士 | 第 2 節 |
 | 2026-11-13 | 雲端的 Claude Code 跟 Antigravity 一樣照 PR 流程，由維護者在 GitHub 審查與合併 | `AGENTS.md`「執行環境」「Git 與 PR 流程」 |
+| 2026-11-13 | Google Drive 只放 `reference/` 圖片並一律依 Folder ID 操作；所有 `.md`（含 `art_guide.md`、`brief.md`、`log.md`）放 GitHub repo；維護者本機 `G:\` 唯讀；Claude Code 無法存取 Antigravity 建立的 Drive 檔案（本機與雲端皆然），以 repo `.md` 為主、圖片由維護者提供 | `AGENTS.md`「執行環境」「Google Drive 對照資料夾」；`art_guide.md` 第 3、9、10 節 |
 
 ## 6. 等維護者決定
 
