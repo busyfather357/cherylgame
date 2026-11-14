@@ -173,6 +173,8 @@ npm --prefix tools ci
 | `reference/characters/` | `10po2Twn2xqPuBCoqrfayzauhAmuxz145` | 角色原圖總目錄 |
 | `reference/characters/cleric/` | `1sSI_6ws5rsygalfxIs_Pbs7AwfOXNQcB` | 牧師定稿圖層 |
 | `reference/characters/cleric/drafts/` | `1zN8Qz_D7KJ1QgbTThf0bH03phIP5mOTB` | 牧師候選圖層 |
+| `reference/characters/knight/` | `1fByyolqzBenptIFxTl4jWfqI5eXEBQOV` | 騎士定稿圖層 |
+| `reference/characters/knight/drafts/` | `1uF66ftg2bJ_ePIl8p8XFmEg4tsvdu5a9` | 騎士候選圖層 |
 
 ## 美術素材
 * 分工（2026-11-12 起）：**Google Antigravity 負責畫圖**（角色、背景的原圖），**Claude Code 負責程式與轉檔**（原圖 → 遊戲用的檔案）。Jules 已停用。
