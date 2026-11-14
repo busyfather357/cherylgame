@@ -6,7 +6,7 @@
 * **狀態改變時在同一個 PR 更新這裡**（完成一個步驟、發現新的待辦、維護者做了決定）。只改 Drive、沒有 PR 的工作（例如 Antigravity 交了一張新的原圖），由下一個開 PR 的 agent 或維護者補上。
 * 這裡只記狀態與下一步，一列一兩句話。怎麼做寫在 SOP（[`art_guide.md`](art_guide.md)、[`character_pipeline.md`](character_pipeline.md)），做的過程與數據寫在 [`lessons_learned.md`](lessons_learned.md)。
 
-最後更新：2026-11-13
+最後更新：2026-11-14
 
 | 圖例 | 意思 |
 |---|---|
@@ -22,11 +22,11 @@
 
 | 順序 | 工作 | 負責 | 前置條件 |
 |---|---|---|---|
-| 1 | 在 Drive 手動刪除本機建的重複 `private/`（以及視需要清掉本機建的 `reference/characters/knight/`）；在本機執行 `python -m tools.sprites --check`，確認牧師的全身圖找得到原圖（2.2） | 維 | 本 PR（`docs/drive-id-and-github-md`）合併 |
-| 2 | 重畫騎士（範圍見 2.2） | 維 | — |
+| 1 | 在 Drive 手動刪除本機建的重複 `private/`（以及視需要清掉本機建的 `reference/characters/knight/`）；在本機執行 `python -m tools.sprites --check`，確認牧師的全身圖找得到原圖（2.2） | 維 | — |
+| 2 | 騎士全身圖轉檔：支援 `fullBody.tolerance`（或單獨指定 `tolerance=50～60`），在 Pillow 12.3.0 環境將 `knight_base_v01.png` 轉為 `public/characters/knight_full.jpg`（2.2） | CC、維 | — |
 | 3 | 決定遊俠、戰士的外觀，在 repo 建立需求單 `private/doc/characters/<id>/brief.md` | 維 | — |
 | 4 | 遊俠、戰士的基準立繪 → 待機 → 跑步（全身圖由基準立繪轉出，不用另外畫） | AG、維 | 第 3 項 |
-| 5 | 選角色介面的設計與實作（第 3 節） | AG 規劃中、CC | 至少兩個角色的全身圖 |
+| 5 | 選角色介面的設計與實作（第 3 節） | AG 規劃中、CC | 至少兩個角色的全身圖（第 2 項完成即具備） |
 
 ## 2. 角色
 
@@ -36,7 +36,7 @@
 
 | 角色 | `id` | 需求單 | 基準立繪 `base` | 待機 `idle` | 跑步 `run` | 設定檔 | 精靈圖 | 全身圖 | 遊戲裡可以選 |
 |---|---|---|---|---|---|---|---|---|---|
-| 騎士 | `knight` | ⬜ | 🔄 待重畫 | 🔄 待重畫 | 🔄 待重畫 | ✅ | ✅ 舊畫風 12.8 KB | ⬜ 等基準立繪 | ✅ 目前唯一的角色 |
+| 騎士 | `knight` | —（對話指示，見 `log.md`） | ✅ `v01` | ✅ 沿用 `Pal_test.png` | ✅ 沿用 `Pal_test.png` | ✅ | ✅ 舊畫風 12.8 KB | 🔄 待轉檔（`v01` 已定稿） | ✅ 目前唯一的角色 |
 | 牧師 | `cleric` | —（對話指示，見 `log.md`） | ✅ `v08` | ✅ `v01` | ✅ `v04` | ✅ | ✅ 74.1 KB | ✅ 53.4 KB | ⬜ 等選角色介面 |
 | 遊俠（弓箭手） | `ranger`（暫定） | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | 戰士 | `warrior`（暫定） | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
@@ -49,9 +49,10 @@
 
 **騎士 `knight`**
 
-* 現在的精靈圖來自改版前的 `Pal_test.png`：像素風、每格約 224 像素高，跟牧師的奇幻動漫畫風（等級 D）不一樣；沒有基準立繪，所以也做不出全身圖。另外 Drive 上原本由本機放入的 `reference/characters/knight/` 對 Antigravity 不可見，之後重畫騎士時須先清理本機建的 `knight/` 資料夾，由 Antigravity 透過 `gdrive` 建資料夾與上傳（並補上 Folder ID 到 `AGENTS.md`）。
-* 維護者要重畫（2026-11-13）。**範圍待確認**：只畫基準立繪（拿來做全身圖），還是待機、跑步也一起改成等級 D。全部重畫的話，新的定稿用 `knight_base_vNN.png` 等檔名，設定檔的 `source` 改指新圖、拿掉 `colors`，重建後精靈圖會整張換掉。
-* 重畫完成之前不要動 `public/characters/knight.png`：在 Linux 上重建會跟現有的差幾個像素（`lessons_learned.md` 6.1）。
+* 2026-11-14 維護者參照 `character_style.png` 在 Gemini App 重畫基準立繪並核可 `knight_base_v01.png`（1024×1024，角色 361×934），已由 Antigravity 上傳至 Drive 的 `reference/characters/knight/`（Folder ID 見 `AGENTS.md`；原本機建立之 `knight/` 對 Antigravity 不可見，維護者可視需要清理）。
+* 維護者決定（2026-11-14）：**只做這張基準立繪用來轉出全身圖（`knight_full.jpg`），待機與跑步動畫先沿用現有的 `Pal_test.png` 精靈圖**，暫不重畫動畫。
+* 待辦（CC、維）：實測 `knight_base_v01.png` 用預設 `tolerance=40` 去背時，劍刃上方與大腿內側極細縫隙會殘留 59 個偏綠像素；調為 `tolerance=50～60` 可降為 0 個。因精靈圖仍沿用 `Pal_test.png`，不宜直接修改頂層 `tolerance`（以免影響 `Pal_test.png`），建議由 CC 在 `tools/sprites.py` 支援 `fullBody.tolerance` 後，於 `tools/characters/knight.json` 加上 `fullBody` 並在 Pillow 12.3.0 環境執行 `python -m tools.sprites --full-body knight`。
+* 不要在 Pillow 非 12.3.0 的環境重建 `public/characters/knight.png`：在 Linux 上重建會跟現有的差幾個像素（`lessons_learned.md` 6.1）。
 
 **牧師 `cleric`**
 
@@ -77,7 +78,7 @@
 |---|---|---|---|
 | 角色精靈圖改由工具產生 | ✅ 2026-11-01 | 騎士轉成新格式，遊戲改讀 `js/characters.js` | `character_pipeline.md` 第 3 節 |
 | 第一個新角色（牧師） | ✅ 2026-11-13 | 精靈圖與全身圖 | 第 2 節 |
-| 每個角色一張全身圖 | 🔄 | 工具完成；牧師完成，騎士等重畫 | `character_pipeline.md` 3.1 |
+| 每個角色一張全身圖 | 🔄 | 工具完成；牧師完成，騎士基準立繪 `v01` 已定稿、待轉檔 | `character_pipeline.md` 3.1 |
 | 選角色介面 | 🔄 AG 規劃中 | 開始畫面或商店裡選角色，顯示全身圖。選到的角色存進永久資料 `profile`（要提高 `SAVE_VERSION` 並加舊版轉換）。待決定的事見第 6 節 | 設計定案後寫進 `system_architecture.md` |
 | 角色面板 | ⬜ | 玩家隨時可以打開，顯示全身圖、等級等 | 同上 |
 | 角色配件（帽子等） | ⬜ | 工具已經算出每格的頭頂掛點 | `character_pipeline.md` 第 5 節 |
@@ -121,12 +122,12 @@
 | 2026-11-13 | 之後要加入遊俠（弓箭手）與戰士 | 第 2 節 |
 | 2026-11-13 | 雲端的 Claude Code 跟 Antigravity 一樣照 PR 流程，由維護者在 GitHub 審查與合併 | `AGENTS.md`「執行環境」「Git 與 PR 流程」 |
 | 2026-11-13 | Google Drive 只放 `reference/` 圖片並一律依 Folder ID 操作；所有 `.md`（含 `art_guide.md`、`brief.md`、`log.md`）放 GitHub repo；維護者本機 `G:\` 唯讀；Claude Code 無法存取 Antigravity 建立的 Drive 檔案（本機與雲端皆然），以 repo `.md` 為主、圖片由維護者提供 | `AGENTS.md`「執行環境」「Google Drive 對照資料夾」；`art_guide.md` 第 3、9、10 節 |
+| 2026-11-14 | 騎士只重畫基準立繪（`knight_base_v01.png`）用來轉出全身圖；待機與跑步動畫先沿用現有的 `Pal_test.png` | 第 2 節 |
 
 ## 6. 等維護者決定
 
 | 事項 | 影響 |
 |---|---|
-| 騎士重畫的範圍：只畫基準立繪（做全身圖），還是待機、跑步也改成等級 D | 決定要不要重做動畫（2.2） |
 | 之後的基準立繪要照 `art_guide.md` 6.3 畫成側面朝右，還是比照牧師的定稿用正面 3/4 視角 | 基準立繪現在也是全身圖；正面比較適合給玩家看，側面朝右比較適合當動畫的參考。牧師的定稿是正面 3/4，跟 6.3 寫的不同 |
 | 遊俠、戰士的外觀與 `id` | 第 2 節的需求單 |
 | 選角色的時機與入口：第一次開遊戲時選、每次 New Game 選，還是隨時可以換 | 選角色介面的設計、存檔格式 |
