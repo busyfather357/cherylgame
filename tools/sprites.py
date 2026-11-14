@@ -39,6 +39,8 @@
 * fullBody (null)：全身圖，例如 { "source": "cleric_base_v08.png" }。source 是原圖檔名，通常是核可的基準立繪；
   一張圖一個角色 (切出不只一格時用最大的一格)，角色要有 680px 高以上，太小會被放大而模糊。
   background (米色)：底色，"#RRGGBB" 或 ["中央", "四角"] 兩色的放射漸層。
+  tolerance (跟上面的 tolerance 相同)：只給全身圖的原圖用的去背容許值。全身圖縮小得少，細縫裡殘留的背景色
+  看得出來，需要比精靈圖高的容許值時設在這裡，精靈圖不受影響。
 
 指令 (從 repo 根目錄執行)：
 
@@ -175,7 +177,7 @@ def _full_body_problems(full_body: object) -> list[str]:
     if not isinstance(full_body, dict):
         return ['fullBody 要是 { "source": "原圖檔名" }']
     problems = []
-    extra = set(full_body) - {"source"} - set(FULL_BODY_DEFAULTS)
+    extra = set(full_body) - {"source", "tolerance"} - set(FULL_BODY_DEFAULTS)
     if extra:
         problems.append(f"fullBody 不認得的欄位 {sorted(extra)}")
     if not isinstance(full_body.get("source"), str) or not full_body["source"]:
@@ -184,6 +186,9 @@ def _full_body_problems(full_body: object) -> list[str]:
     colors = background if isinstance(background, list) else [background]
     if len(colors) not in (1, 2) or not all(isinstance(c, str) and HEX_COLOR.fullmatch(c) for c in colors):
         problems.append('fullBody.background 要是 "#RRGGBB"，或 ["中央", "四角"] 兩個顏色')
+    tolerance = full_body.get("tolerance", 0)
+    if not isinstance(tolerance, int) or isinstance(tolerance, bool) or not 0 <= tolerance <= 255:
+        problems.append("fullBody.tolerance 要是 0～255 的整數")
     return problems
 
 
@@ -368,34 +373,36 @@ def build_character(char_id: str, characters_dir: Path = config.CHARACTERS_DIR,
     source_dir = reference_dir / "characters" / char_id
     report: list[str] = []
     warnings: list[str] = []
-    sources: dict[str, list[Frame]] = {}
+    sources: dict[tuple[str, int], list[Frame]] = {}
     backgrounds: dict[str, tuple[int, int, int]] = {}
 
-    def frames_of(name: str) -> list[Frame]:
-        if name not in sources:
+    def frames_of(name: str, tolerance: int = cfg["tolerance"]) -> list[Frame]:
+        """原圖去背後切出的格子。同一張原圖用不同的容許值 (fullBody.tolerance) 時各自處理。"""
+        if (name, tolerance) not in sources:
             path = source_dir / name
             if not path.is_file():
                 raise MissingSource(f"找不到原圖 {config.display_path(path)} (原圖不進 git，正本在 Google Drive)")
             with Image.open(path) as im:
                 size = im.size
                 bg = background_color(im)
-                frames = find_frames(key_background(im, cfg["tolerance"]))
-            sources[name] = frames
+                frames = find_frames(key_background(im, tolerance))
+            sources[name, tolerance] = frames
             backgrounds[name] = bg
-            report.append(f"原圖 {name}：{size[0]}×{size[1]}，背景色 #{bg[0]:02X}{bg[1]:02X}{bg[2]:02X}，切出 {len(frames)} 格")
+            note = "" if tolerance == cfg["tolerance"] else f" (去背容許值 {tolerance})"
+            report.append(f"原圖 {name}{note}：{size[0]}×{size[1]}，背景色 #{bg[0]:02X}{bg[1]:02X}{bg[2]:02X}，切出 {len(frames)} 格")
             heights = [f.image.height for f in frames]
             for i, f in enumerate(frames):
                 l, t, r, b = f.box
                 report.append(f"  {i:2d}: x {l}～{r}，y {t}～{b} ({r - l}×{b - t})")
                 if f.image.height < median(heights) * 0.3:
                     warnings.append(f"{name} 第 {i} 格很小 ({r - l}×{b - t})，可能是分離的劍尖或雜點，格子編號會因此往後移")
-        return sources[name]
+        return sources[name, tolerance]
 
     full = cfg["fullBody"]
     full_body, full_entry = None, {}
     full_line = "全身圖：沒有 (設定檔沒有 fullBody)，選角色介面與角色面板沒有圖可以顯示"
     if full:
-        frames = frames_of(full["source"])
+        frames = frames_of(full["source"], full.get("tolerance", cfg["tolerance"]))
         if not frames:
             raise BuildError(f"{char_id}：全身圖的原圖 {full['source']} 去背後沒有東西")
         frame = max(frames, key=lambda f: f.image.width * f.image.height)

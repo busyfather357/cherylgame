@@ -241,6 +241,34 @@ class FullBodyTest(WorkDirTestCase):
         pinkish = [tuple(data[i:i + 3]) for i in range(0, len(data), 3) if min(data[i], data[i + 2]) - data[i + 1] > 10]
         self.assertEqual(pinkish, [])
 
+    def test_own_tolerance_only_affects_full_body(self) -> None:
+        # 角色身上有一塊跟背景色差 50 的綠色 (細縫裡沒去乾淨的背景)：預設的容許值 40 會留下來，fullBody.tolerance 60 才去得掉
+        base = make_base()
+        ImageDraw.Draw(base).rectangle([440, 590, 460, 610], fill=(50, 205, 50))
+        results = {}
+        for name, full_body in (("plain", {"source": "base.png"}), ("tolerant", {"source": "base.png", "tolerance": 60})):
+            self.add_character(name, {**SETTINGS, "fullBody": full_body}, make_source())
+            base.save(self.reference_dir / "characters" / name / "base.png")
+            results[name] = self.build(name)
+        plain, tolerant = results["plain"], results["tolerant"]
+
+        def green_pixels(image: Image.Image) -> int:
+            data = image.tobytes()
+            return sum(1 for i in range(0, len(data), 3) if data[i + 1] - max(data[i], data[i + 2]) > 100)
+
+        self.assertGreater(green_pixels(plain.full_body), 100)
+        self.assertEqual(green_pixels(tolerant.full_body), 0)  # 那一塊透出米色的底
+        self.assertTrue(any("base.png (去背容許值 60)" in line for line in tolerant.report))
+        # 精靈圖用的還是最上層的容許值
+        self.assertEqual(tolerant.sheet.tobytes(), plain.sheet.tobytes())
+
+    def test_same_source_keyed_once_per_tolerance(self) -> None:
+        self.add_character("plain", SETTINGS, make_source())
+        self.add_character("hero", {**SETTINGS, "fullBody": {"source": "sheet.png", "tolerance": 60}}, make_source())
+        built = self.build("hero")
+        self.assertEqual(built.sheet.tobytes(), self.build("plain").sheet.tobytes())
+        self.assertEqual(len([line for line in built.report if line.startswith("原圖 sheet.png")]), 2)
+
     def test_neutral_background_left_alone(self) -> None:
         rgb = Image.new("RGB", (40, 60), (200, 200, 200))
         ImageDraw.Draw(rgb).rectangle([10, 10, 29, 49], fill=(40, 160, 60))  # 綠色的角色、灰色的背景
@@ -399,6 +427,8 @@ class ConfigTest(unittest.TestCase):
         self.assertIsNone(sprites.validate_config(SETTINGS, "test")["fullBody"])
         cfg = sprites.validate_config({**SETTINGS, "fullBody": {"source": "base.png"}}, "test")
         self.assertEqual(cfg["fullBody"], {"source": "base.png", "background": ["#FFF8DC", "#E6C992"]})
+        cfg = sprites.validate_config({**SETTINGS, "fullBody": {"source": "base.png", "tolerance": 50}}, "test")
+        self.assertEqual(cfg["fullBody"]["tolerance"], 50)
 
     def test_bad_full_body_rejected(self) -> None:
         for full_body, message in (
@@ -407,6 +437,9 @@ class ConfigTest(unittest.TestCase):
             ({"source": "base.png", "bakground": "#FFFFFF"}, "bakground"),
             ({"source": "base.png", "background": "white"}, "fullBody.background"),
             ({"source": "base.png", "background": ["#FFFFFF", "#000000", "#FF0000"]}, "fullBody.background"),
+            ({"source": "base.png", "tolerance": "50"}, "fullBody.tolerance"),
+            ({"source": "base.png", "tolerance": 300}, "fullBody.tolerance"),
+            ({"source": "base.png", "tolerance": True}, "fullBody.tolerance"),
         ):
             with self.subTest(full_body=full_body), self.assertRaisesRegex(sprites.BuildError, message):
                 sprites.validate_config({**SETTINGS, "fullBody": full_body}, "test")
