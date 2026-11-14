@@ -1,8 +1,8 @@
 # 美術素材生成規範（給 Google Antigravity）
 
-規範版本：2026-11-13 v4（正本在 git repo 的 `private/doc/art_guide.md`；Google Drive 上同一個路徑的檔案是副本，兩邊不同時以版本較新的為準）
+規範版本：2026-11-13 v5（正本只在 GitHub repo 的 `private/doc/art_guide.md`，Google Drive 不再放置副本）
 
-文件類型：**SOP**。專案的其他文件都在 git repo 的 `private/doc/`：文件地圖 `README.md`、每個角色做到哪一步的 `work_plan.md`、原圖轉成遊戲檔案的 `character_pipeline.md`、實測紀錄 `lessons_learned.md`。只讀得到 Drive 的時候，本文件加上該素材的需求單 `brief.md` 就足夠畫圖。
+文件類型：**SOP**。專案的其他文件都在 git repo 的 `private/doc/`：文件地圖 `README.md`、每個角色做到哪一步的 `work_plan.md`、原圖轉成遊戲檔案的 `character_pipeline.md`、實測紀錄 `lessons_learned.md`，以及各素材的需求單 `brief.md` 與生圖紀錄 `log.md`。
 
 這份文件給負責畫圖的 AI agent（Google Antigravity）閱讀，也是維護者下指令時的依據。內容是《RPG 數學挑戰：木木島趣味練習場》的角色圖與背景圖要怎麼畫、存在哪裡、怎麼交接。
 
@@ -12,9 +12,9 @@
 
 | 誰 | 做什麼 | 不做什麼 |
 |---|---|---|
-| **Antigravity（美術與轉檔驗證）** | 依本文件編寫提示詞、生成或接收維護者由 Gemini App 生成的原圖，以 `tools/sprites.py` 檢查去背與切格，存到 Google Drive 的 `Antigravity_Data/cherylgame/reference/`，寫生圖紀錄 | 原圖不去背、不裁切、不縮放、不壓縮 |
+| **Antigravity（美術與轉檔驗證）** | 依本文件編寫提示詞、生成或接收維護者由 Gemini App 生成的原圖，以 `tools/sprites.py` 檢查去背與切格，依 Folder ID 存到 Google Drive 的 `reference/`，並在 repo 更新 `log.md` | 原圖不去背、不裁切、不縮放、不壓縮；不把 `.md` 放進 Drive |
 | **Claude Code／Antigravity（程式與轉檔）** | 把核可的原圖轉成遊戲用的檔案（去背、切格、對齊、縮放、壓縮）、寫遊戲程式 | |
-| **維護者** | 提需求、在每個關卡挑圖與核可；必要時用 Gemini App 快速抽圖傳給 Antigravity 審核 | |
+| **維護者** | 提需求、在每個關卡挑圖與核可；必要時用 Gemini App 快速抽圖傳給 Antigravity 審核 | 不在本機 `G:\` 手動建資料夾或拖曳放檔（`G:\` 僅唯讀） |
 
 原圖會由 `tools/sprites.py` 自動處理。**第 6 節的技術規則不是美感偏好，而是這個工具的輸入條件**：不符合時工具會切錯、留下綠邊，或把角色的一部分吃掉，那張圖就只能重畫。
 
@@ -29,39 +29,43 @@
 5. 角色圖的背景是**一整片純綠 `#00FF00`**（角色有綠色時改用洋紅 `#FF00FF`），不要透明背景。
 6. 角色圖不要有：地面陰影、發光、光暈、閃光、粒子、殘影、漸層背景、文字、外框、白色貼紙邊。
 7. 角色全身都在畫面內、四周留空；面向**右**。
-8. 存原始輸出的 PNG，不做任何後製。生成的圖都存到該素材的 `drafts/`，檔名與資料夾照第 3 節，**不覆寫、不刪除**舊檔。
-9. 每生成一張圖，就把完整提示詞記到該素材的 `log.md`（第 9 節）。
+8. 存原始輸出的 PNG，不做任何後製。生成的圖都存到 Drive 該素材的 `drafts/`，檔名與資料夾照第 3 節，**不覆寫、不刪除**舊檔。
+9. 每生成一張圖，就把完整提示詞記到 repo 內該素材的 `log.md`（第 9 節）。
 10. 上傳前照第 8 節自我檢查，不合格的圖不要當成候選交出來（可以留著，但要在 `log.md` 註明哪一項不合格）。
 
-## 3. Google Drive 資料夾與檔名
+## 3. Google Drive 與 repo 的資料夾與檔名
 
-**Google Drive 的 `Antigravity_Data/cherylgame/` 對照專案的根目錄**（維護者電腦上的 git repo `C:\GitHub\cherylgame`），兩邊的資料夾結構完全相同。本文件裡的路徑都是從專案根目錄算起的相對路徑，在 Drive 與 repo 是同一個位置。
-
-* 程式、設定、文件由 git 管理，不放 Drive。唯一的例外是本文件：Drive 的 `private/doc/art_guide.md` 放一份副本，讓美術 agent 讀得到。
-* **`reference/` 整個放在 Drive，Drive 是正本**。它是放不進 git 的大型檔案（原圖、候選圖、畫風基準圖），repo 的 `.gitignore` 排除了這個資料夾。Drive 的空間大，刪除檔案就能釋出空間；git 的歷史刪不掉。
-* 美術 agent 只在 `Antigravity_Data/cherylgame/reference/`（以及同步本文件副本 `private/doc/art_guide.md`）寫入；`Antigravity_Data/` 底下其他專案的資料夾不要碰。
+* **分工原則**：
+    * **GitHub repo 放所有 `.md` 文件與紀錄**：包含本文件、需求單 `brief.md`、生圖紀錄 `log.md`，統一放在 `private/doc/`。**不在 Google Drive 放 `private/`、文件副本或任何 `.md`**（實測 Claude Code 讀不到 Antigravity 建立的 Drive 檔案，且雙邊放文件會不同步與撞名）。
+    * **Google Drive 只放 `reference/` 圖片資產**：放不進 git 的大型原圖、候選圖與畫風基準圖（repo 的 `.gitignore` 已排除 `reference/`）。Drive 空間大，刪除就能釋出空間；git 歷史刪不掉。
+* **必須用 Folder ID 定位，禁止只憑名稱 `mkdir`**：Google Drive 的資料夾名稱不是絕對路徑，同一層可同時存在多個同名資料夾。操作 Drive 前必須先查 [`AGENTS.md`](../../AGENTS.md)「Google Drive 對照資料夾」的 **Folder ID 登錄表**，一律從登記好的 `FOLDER_ID` 進入：
+    * 嚴禁對既有層級（`Antigravity_Data`、`cherylgame`、`reference`、`characters` 等）重新執行 `mkdir` 或只靠全域名稱搜尋。
+    * 需要新建子資料夾（例如新角色 `<id>`、`drafts`、`backgrounds`）時，必須先執行 `gdrive readonly ls <PARENT_ID>` 確認不存在同名資料夾再建立，建完後於同一個 PR 將新 `FOLDER_ID` 補進 `AGENTS.md` 登錄表。
+    * 更新既有圖片或替換檔案時，先查出 `fileId` 改用 `gdrive mutate update <FILE_ID>`，避免重複 `upload` 產生同名複本。
+* **本機 `G:\` 唯讀（單一建立者原則）**：Antigravity 的 `gdrive` 外掛權限為 `drive.file`，看不到維護者從本機 `G:\` 或網頁版手動放入的檔案／資料夾。因此維護者本機 `G:\` 僅作唯讀讀取，所有圖片一律交由 Antigravity 透過 `gdrive` CLI 上傳。`Antigravity_Data/` 底下其他專案的資料夾不要碰。
 
 ```text
-Antigravity_Data/cherylgame/          # = 專案根目錄
-├── private/doc/art_guide.md          # 本文件的副本 (正本在 git)
-└── reference/                        # 正本在這裡，不進 git
-    ├── style/                        # 畫風基準圖：維護者核可後才放進來，之後生圖時附上當參考
-    │   └── character_style.png       # 角色畫風基準圖 (cleric_base_v08.png)
-    ├── characters/
-    │   └── <id>/                     # 一個角色一個資料夾，例如 cleric
-    │       ├── brief.md              # 需求單 (維護者或 Claude Code 寫，見 9.1)
-    │       ├── log.md                # 生圖紀錄 (Antigravity 寫，見 9.2)
-    │       ├── <id>_base_v08.png     # 這一層只放「定稿」：轉檔工具讀的就是這一層。base 也是全身圖的原圖 (6.11)
-    │       ├── <id>_idle_v01.png
-    │       ├── <id>_run_v04.png
-    │       └── drafts/               # 所有生成的圖 (候選、重畫、被淘汰的) 都先放這裡
-    │           ├── <id>_base_v01.png
-    │           └── <id>_base_v02.png
-    └── backgrounds/
-        └── <id>/                     # 一張背景一個資料夾，例如 shop
-            ├── brief.md、log.md
-            ├── <id>_v01.png          # 定稿
-            └── drafts/
+GitHub repo: private/doc/             # 所有文字與紀錄的正本
+├── art_guide.md                      # 本文件
+└── <characters|backgrounds>/<id>/
+    ├── brief.md                      # 需求單 (維護者或 Claude Code 寫，見 9.1)
+    └── log.md                        # 生圖紀錄 (Antigravity 寫，見 9.2)
+
+Google Drive: Antigravity_Data/cherylgame/reference/   # 只放圖片 (Folder ID 見 AGENTS.md)
+├── style/                            # 畫風基準圖：維護者核可後才放進來，之後生圖時附上當參考
+│   └── character_style.png           # 角色畫風基準圖 (cleric_base_v08.png)
+├── characters/
+│   └── <id>/                         # 一個角色一個資料夾，例如 cleric
+│       ├── <id>_base_v08.png         # 這一層只放「定稿」：轉檔工具讀的就是這一層。base 也是全身圖的原圖 (6.11)
+│       ├── <id>_idle_v01.png
+│       ├── <id>_run_v04.png
+│       └── drafts/                   # 所有生成的圖 (候選、重畫、被淘汰的) 都先放這裡
+│           ├── <id>_base_v01.png
+│           └── <id>_base_v02.png
+└── backgrounds/
+    └── <id>/                         # 一張背景一個資料夾，例如 shop
+        ├── <id>_v01.png              # 定稿
+        └── drafts/
 ```
 
 * `<id>`：英文小寫、數字、底線，例如 `cleric`、`ice_mage`、`shop`。它也是遊戲程式裡的名稱，定了就不要改。
@@ -73,7 +77,7 @@ Antigravity_Data/cherylgame/          # = 專案根目錄
 * 生成的圖一律先存到 `drafts/`。
 * 定稿：維護者說「核可 `<檔名>`」時，把那個檔案從 `drafts/` **複製**到上一層（`<id>/`），檔名不變，`drafts/` 裡的原檔留著。上一層同一種類只留一個檔案；換定稿時刪掉上一層舊的那個（它在 `drafts/` 還有一份）。
 * `drafts/` 裡的檔案由維護者決定什麼時候清理，美術 agent 不要自己刪。
-* Drive 根目錄的 `female_cleric_concept.png` 是改用本規範之前的測試圖（實測結果見 `lessons_learned.md` 1.5），不是定稿。
+* 改用本規範前的早期測試圖 `female_cleric_concept.png` 已移至垃圾桶（實測結果見 `lessons_learned.md` 1.5）。
 
 ## 4. 工作流程與核可關卡
 
@@ -112,14 +116,14 @@ Waiting for approval.
 
 實測發現兩個環境限制：
 1. **Antigravity 內建生圖配額限制**：Antigravity 的 `generate_image`（`gemini-3.1-flash-image`）每 5 小時滾動視窗僅能生成約 **2～3 張圖**，且平行發送請求容易觸發 ~3 秒的 burst rate limit；而消費者端 **Gemini App（網頁／手機版）生圖幾乎無配額限制**。
-2. **Google Drive `drive.file` 權限範圍**：Antigravity 連接 Google Drive 的 OAuth 權限為 `drive.file`，只能讀寫「由 Antigravity 自己建立與上傳的檔案」。維護者直接從 iPhone 或電腦放進 Google Drive 資料夾的檔案，`gdrive` CLI 看不到。
+2. **Google Drive `drive.file` 權限範圍**：Antigravity 連接 Google Drive 的 OAuth 權限為 `drive.file`，只能讀寫「由 Antigravity 自己建立與上傳的檔案」。維護者直接從 iPhone 或電腦 `G:\` 放進 Google Drive 資料夾的檔案，Antigravity 看不到（也會導致後續重複建出同名資料夾）。
 
 因此最順暢的協作流程為：
 1. **Antigravity 產出完整英文 Prompt**（或微調修正指令）。
 2. **維護者在 Gemini App 貼上指令抽圖**，把滿意的圖片**直接附加在 Antigravity 對話視窗傳給 Agent**。
 3. **Antigravity 自動驗證與歸檔**：
    * 收到圖片後立刻跑 `tools/sprites.py`（`key_background`、`find_frames`、產生預覽 GIF），精確檢查切出幾格、有無封閉綠洞、頭頂水平晃動幾像素。
-   * 轉存為無損 `.png`、依第 3 節命名規則改名（例如 `cleric_run_v04.png`），並由 Antigravity 透過 `gdrive` CLI 上傳至 `drafts/` 與定稿區（由 Antigravity 上傳的檔案，之後 Drive 與 Agent 兩邊就都看得到了），同時把紀錄寫入 `log.md`。
+   * 轉存為無損 `.png`、依第 3 節命名規則改名（例如 `cleric_run_v04.png`），並由 Antigravity 查 `AGENTS.md` 的 Folder ID 後透過 `gdrive` CLI 上傳至 `drafts/` 與定稿區（由 Antigravity 上傳的檔案，Drive 網頁版／本機 `G:\` 與 Antigravity 之間就都能共用），同時把生圖紀錄寫入 repo 的 `private/doc/<characters|backgrounds>/<id>/log.md`。
 
 ## 5. 畫風
 
@@ -436,7 +440,7 @@ Composition: the main subject is in the horizontal center of the image and in th
 
 ## 9. 需求單與生圖紀錄
 
-### 9.1 `brief.md`（維護者或 Claude Code 寫）
+### 9.1 `brief.md`（維護者或 Claude Code 寫，放 repo `private/doc/<characters|backgrounds>/<id>/brief.md`）
 
 ```markdown
 # cleric（牧師）
@@ -450,7 +454,7 @@ Composition: the main subject is in the horizontal center of the image and in th
 
 沒有 `brief.md`、只有對話中的指示時，照指示做，並把指示內容記在 `log.md`。
 
-### 9.2 `log.md`（Antigravity 寫，只往後加，不改舊的）
+### 9.2 `log.md`（Antigravity 寫，放 repo `private/doc/<characters|backgrounds>/<id>/log.md`，只往後加，不改舊的）
 
 最上面是定稿的 CHARACTER 區塊（還沒定稿時寫目前使用的）。之後每生成一張圖加一段：
 
@@ -459,7 +463,7 @@ Composition: the main subject is in the horizontal center of the image and in th
 - 日期：2026-11-12
 - 步驟：1 基準立繪
 - 生圖工具／模型：（名稱與版本）
-- 規範版本：2026-11-13 v4
+- 規範版本：2026-11-13 v5
 - 附上的參考圖：無
 - 自我檢查：通過／第 N 項不合格（說明）
 - 提示詞：
@@ -471,10 +475,9 @@ Composition: the main subject is in the horizontal center of the image and in th
 
 ## 10. 給 Claude Code／Antigravity：轉檔與交接
 
-* 維護者的電腦上，Google Drive 掛載在 `G:\我的雲端硬碟\`，對照專案根目錄的資料夾是 `G:\我的雲端硬碟\Antigravity_Data\cherylgame\`。
-* **`tools/` 的 Python 工具直接讀 Drive 的 `reference/`**（`tools/config.py` 的 `REFERENCE_DIR`），不用複製。Drive 沒有掛載、或 Drive 上沒有 `reference/` 時，才讀 repo 裡的 `reference/`。位置可以用環境變數 `CHERYLGAME_DRIVE_DIR` 改。
-* Claude Code 在 Drive 上只讀定稿（`<id>/` 那一層），不修改、不刪除美術 agent 的檔案；可以寫 `brief.md`。
-* **角色**：定稿已經在 `reference/characters/<id>/`。建立 `tools/characters/<id>.json`，執行 `python -m tools.sprites <id>`，看 `tools/work/sprites/<id>/` 的預覽與報告。步驟見 [`character_pipeline.md`](character_pipeline.md) 第 2 節。
+* **Claude Code 無法存取 Antigravity 建立的 Drive 檔案（本機與雲端皆然）**：實測即使在本機電腦透過桌機版 Google Drive（`G:\我的雲端硬碟\Antigravity_Data\cherylgame\`），Claude Code 也看不到 Antigravity 建立的檔案。因此 **Claude Code 一律以 GitHub repo 的 `.md`（`brief.md`、`log.md`、`work_plan.md`）與程式碼為準**；轉檔或檢查需要原圖時，請維護者在對話中附上圖片並確認對應的定稿檔名。
+* 維護者本人電腦上掛載的 `G:\我的雲端硬碟\Antigravity_Data\cherylgame\` 僅作**唯讀讀取**（讓維護者自行跑 `tools/sprites.py` 時由 `tools/config.py` 直接讀 Drive 的 `reference/`）；不在 `G:\` 手動建資料夾或拖曳放檔。
+* **角色**：圖片定稿放在 Drive 的 `reference/characters/<id>/`（Folder ID 見 `AGENTS.md`），定稿檔名記在 repo 的 `private/doc/characters/<id>/log.md`。建立 `tools/characters/<id>.json`，執行 `python -m tools.sprites <id>`，看 `tools/work/sprites/<id>/` 的預覽與報告。步驟見 [`character_pipeline.md`](character_pipeline.md) 第 2 節。
     * `source` 填定稿的檔名（含版本號，例如 `cleric_idle_v01.png`）。換定稿時檔名會變，要跟著改設定檔。
     * 待機與跑步是兩張原圖：`animations` 裡各自用 `"source"` 指定，例如 `"idle": { "source": "cleric_idle_v01.png", "frames": [0, 1, 2, 3], "fps": 6 }`。設定檔最上層的 `source` 填 idle 那張。`tools/sprites.py` 會依每張原圖各自的第 1 格身高分別計算縮放倍率，確保不同原圖的角色縮到相同的 `charHeight`（預設 96px）。
     * 只有基準立繪、沒有動畫的角色：`idle` 與 `run` 都用 `"frames": [0]`，角色是靜態的（程式動畫還沒做）。
@@ -482,7 +485,7 @@ Composition: the main subject is in the horizontal center of the image and in th
     * 全身圖：設定檔加上 `"fullBody": { "source": "<id>_base_vNN.png" }`（核可的基準立繪），重建後看 `public/characters/<id>_full.jpg`。只拿得到基準立繪、沒有動畫原圖的環境，用 `python -m tools.sprites --full-body <id>` 只重建全身圖。底色預設是米色，要換時加 `"background"`（見 `tools/sprites.py` 開頭）。
 * **背景**：把 `reference/backgrounds/<id>/` 的定稿縮成 1600×1600、WebP 品質 75、200 KB 以內，放到 `public/`（目前沒有專用工具；商店背景的版面見架構文件第 3 節）。
 * 轉檔時發現原圖不符合規則（留下綠邊、切格錯誤、動作不連貫），回報是哪一條，由維護者或 Antigravity 依規則重畫或局部修整；不要用手動 P 圖補救。規則本身不夠清楚時，修改本文件並提高規範版本。
-* 本文件修改後，提高開頭的規範版本，並把新版複製到 Drive 的同一個路徑（`Antigravity_Data/cherylgame/private/doc/art_guide.md`）。
+* 本文件修改後只需提高開頭的規範版本並隨 PR 合併，不再複製到 Drive。
 
 ### 10.1 目前遊戲還不支援的素材
 
@@ -500,5 +503,5 @@ Composition: the main subject is in the horizontal center of the image and in th
 
 本文件只放規則與做法。每次生圖、轉檔的實測結果（哪個提示詞造成什麼問題、量到的數字、怎麼修正）記在 git repo 的 [`lessons_learned.md`](lessons_learned.md) 第 1 節；從實測學到、會改變做法的事，已經寫進本文件對應的規則。
 
-* 每張圖的完整提示詞與自我檢查結果，照 9.2 記在該素材的 `log.md`（Drive）。
-* 發現規則不夠清楚或漏掉情況時：修改本文件並提高規範版本，把經過寫進 `lessons_learned.md`，再把新版複製到 Drive。
+* 每張圖的完整提示詞與自我檢查結果，照 9.2 記在 repo 內該素材的 `log.md`（`private/doc/<characters|backgrounds>/<id>/log.md`）。
+* 發現規則不夠清楚或漏掉情況時：修改本文件並提高規範版本，把經過寫進 `lessons_learned.md`。

@@ -14,7 +14,7 @@
 - [ ] 已更新 `private/doc/work_plan.md` 與相關文件
 
 ## 合併後維護者要做的事
-<!-- agent 做不到、但不做就不完整的事：把新的原圖放到 Google Drive、把 art_guide.md 複製到 Drive、實機測試。沒有就寫「無」 -->
+<!-- agent 做不到、但不做就不完整的事：把新原圖傳給 Antigravity 上傳到 Google Drive、本機執行 --check、實機測試。沒有就寫「無」 -->
 
 ## 待決定的事
 <!-- 需要維護者決定、這個 PR 沒有處理的事。沒有就寫「無」 -->

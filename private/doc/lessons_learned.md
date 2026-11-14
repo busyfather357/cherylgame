@@ -30,6 +30,8 @@
 | 2026-11-13 | 雲端環境讀不到 Drive 上的原圖，只拿得到維護者在對話中附上的圖 | `python -m tools.sprites --full-body`；`character_pipeline.md` 第 1 節 |
 | 2026-11-13 | 維護者在對話中附上的圖，通常是 Drive 上已經核可的定稿，不是新的原圖；沒問清楚就會多出不存在的檔名與步驟 | `AGENTS.md`「美術素材」；`character_pipeline.md` 第 1 節 |
 | 2026-11-13 | 同一份原圖在不同作業系統重建，結果可能差幾個像素，`--check` 會誤報 | 全身圖用容許誤差比較（`character_pipeline.md` 4.2）；精靈圖尚未處理（[`work_plan.md`](work_plan.md) 第 4 節） |
+| 2026-11-13 | Google Drive 用名稱認定位置會因 `drive.file` 盲區與同名允許機制重複建出資料夾（出現兩個 `private/`） | `AGENTS.md`「Google Drive 對照資料夾」（Folder ID 登錄表 + 本機 `G:\` 唯讀）；Drive 只放 `reference/` 圖片，`.md` 統一放 repo |
+| 2026-11-13 | Claude Code 無法存取 Antigravity 建立的 Drive 檔案（本機桌機版 `G:\` 與雲端皆然） | `AGENTS.md`「執行環境」「Google Drive 對照資料夾」；`character_pipeline.md` 第 1 節 |
 
 ## 1. 美術素材與角色圖
 
@@ -296,3 +298,17 @@
 * **更正**（同一個 PR，合併之前）：全身圖的原圖就是核可的基準立繪，不用另外畫；拿掉種類 `full`、步驟 5 與提示詞範本；設定檔的 `fullBody.source` 改成定稿的檔名。成品 `cleric_full.jpg` 沒有變（同一張圖）。
 * **現在的做法**：雲端環境收到維護者附上的圖時，先確認它是 Drive 上的哪一個檔案，還是 Drive 上還沒有的新圖；照 Drive 上的檔名放進 repo 的 `reference/`，不自己取檔名、不新增種類或步驟。寫在 `AGENTS.md`「美術素材」與 `character_pipeline.md` 第 1 節。
 * **還沒確認的事**：設定檔填的 `cleric_base_v08.png` 是文件記載的定稿檔名，Claude Code 沒有親眼看到 Drive 上的檔名。待辦在 `work_plan.md` 2.2。
+
+### 6.3 2026-11-13：Google Drive 資料夾同名衝突與跨 Agent 權限邊界
+
+* **情境與現象**：維護者在 Google Drive 的 `Antigravity_Data/cherylgame/` 下發現出現**兩個 `private` 資料夾**。以 `gdrive` CLI 檢查時，Antigravity 只看得到其中一個由它自己於 `2026-11-13T09:03:26Z` 建立的 `private/`（ID `1JnwSZg1hvxHXh10tWDunddQqf3Z0S1o5`，內含過時的 `art_guide.md` v3）；另外一個 `private/`（由本機 Claude Code 放入）以及先前放在 `reference/characters/knight/` 的檔案，在 Antigravity 這端完全看不到。同時維護者確認：Antigravity 建立的 Drive 檔案，Claude Code 即使在本機電腦透過桌機版 Google Drive（`G:\`）也同樣看不到，只有維護者本人看得到。
+* **原因**：
+    1. **`drive.file` 單向權限盲區**：Antigravity 的 `gdrive` 外掛只有 `drive.file` 權限，只看得到同一個外掛建立與上傳的項目。只要另一方（本機 Claude Code 或維護者）在 `G:\` 建立資料夾或放入檔案，Antigravity 就完全看不到，進而誤判資料夾不存在而重複 `mkdir`。
+    2. **Claude Code 無法跨邊界讀取 Drive**：實測無論是雲端工作階段或本機桌機版 `G:\`，Claude Code 都無法存取 Antigravity 建立的 Google Drive 檔案。把 `brief.md`、`log.md` 或 `art_guide.md` 副本放在 Drive，不僅造成兩邊版本落差，也讓 Claude Code 看不到需求單與生圖紀錄。
+    3. **Google Drive 是 ID 制而非路徑制**：Drive 允許同一個父資料夾底下存在多個同名或近似名稱的資料夾（各自有不同的 `folderId`），且 `gdrive mutate mkdir` 與 `upload` 都不會阻止同名建立或自動覆寫；僅靠文字路徑名稱認定擺放位置必然產生混淆。
+* **現在的做法（已寫回規則與 SOP）**：
+    * **文字歸 GitHub、圖片歸 Drive**：Drive 的 `Antigravity_Data/cherylgame/` 只保留 `reference/` 裡的圖片素材；移除 Drive 上的 `private/`（含 `art_guide.md` 副本）與早期測試圖 `female_cleric_concept.png`，並將 `cleric` 的 `log.md` 遷回 repo 的 `private/doc/characters/cleric/log.md`。之後所有 `.md`、`brief.md`、`log.md` 統一在 GitHub repo 維護。
+    * **以 Folder ID 登錄表取代名稱定位**：在 `AGENTS.md`「Google Drive 對照資料夾」列出各層級的唯一 `FOLDER_ID`，規定 Antigravity 必須從登記好的 ID 進入、更新檔案改用 `mutate update <FILE_ID>`、建新子資料夾前先 `ls <PARENT_ID>` 並把新 ID 補進登錄表。
+    * **維護者本機 `G:\` 唯讀**：維護者不在 `G:\` 手動建資料夾或拖曳放檔（只供自己本機執行工具讀取），需進 Drive 的圖片一律透過對話交給 Antigravity 上傳。
+    * **明確寫定 Claude Code 邊界**：在 `AGENTS.md` 與 `character_pipeline.md` 註明 Claude Code（本機與雲端皆然）無法存取 Antigravity 建立的 Drive 檔案，一律以 repo 的 `.md` 與程式碼確認資訊，需要圖片時請維護者直接提供。
+
