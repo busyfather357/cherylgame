@@ -120,6 +120,14 @@
             <button id="shop-close" class="answer-btn" type="button">Start ▶️</button>
         </div>
     </div>
+    <!-- 選角色畫面 (js/character_select.js)：每次開啟遊戲時先顯示，角色卡依 js/characters.js 產生 -->
+    <div id="character-overlay">
+        <div id="character-modal">
+            <h2 id="character-title">Choose Your Hero!</h2>
+            <div id="character-list"></div>
+            <button id="character-start" class="answer-btn" type="button">Start ▶️</button>
+        </div>
+    </div>
     <div id="toast-container"></div>
     <canvas id="game"></canvas>
     <!-- 各系統檔案載入時不會呼叫 script.js 的函式；script.js 一執行就會讀檔並開始第 1 關，所以放最後 -->
@@ -134,6 +142,7 @@
     <script src="js/enemies.js"></script>
     <script src="js/touch.js"></script>
     <script src="js/characters.js"></script>
+    <script src="js/character_select.js"></script>
     <script src="script.js"></script>
 </body> 
 </html>

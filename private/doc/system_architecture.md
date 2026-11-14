@@ -28,10 +28,11 @@ cherylgame/
 │   │   ├── stages.js           # 章節、主題與每關數值 (見 7.1)
 │   │   ├── enemies.js          # 怪物、寶箱、魔王的建立、移動、攻擊與繪製 (見 7.2、7.3)
 │   │   ├── touch.js            # 觸控操作：浮動搖桿、道具按鈕、畫面方向、遊戲區域、?debug (見第 8 節)
-│   │   └── characters.js       # 角色的精靈圖、動畫設定與全身圖，由 tools/sprites.py 產生 (見 2.1)
+│   │   ├── characters.js       # 角色的精靈圖、動畫設定與全身圖，由 tools/sprites.py 產生 (見 2.1)
+│   │   └── character_select.js # 選角色畫面：每次開啟遊戲時先顯示 (見 3.1)
 │   ├── characters/             # 角色圖，由 tools/sprites.py 產生
 │   │   ├── <id>.png            # 精靈圖 (Sprite Sheet)：knight 騎士、cleric 牧師
-│   │   └── <id>_full.jpg       # 全身圖，選角色介面與角色面板用 (見 2.1)：目前只有 cleric
+│   │   └── <id>_full.jpg       # 全身圖，選角色畫面與之後的角色面板用 (見 2.1)：knight、cleric
 │   ├── shop_bg.webp            # 商店背景圖 (見第 3 節)
 │   └── screenshot.png          # 社群分享預覽圖 (og:image)，由 tools/browser/og-image.js 產生
 ├── tools/                      # 不部署：本機開發工具 (見第 9 節)
@@ -40,12 +41,13 @@ cherylgame/
 │   ├── .npmrc                  # save-exact=true
 │   ├── playwright.config.js    # 瀏覽器測試設定：輸出到 tools/work/playwright/
 │   ├── browser/
-│   │   ├── site.js             # 共用：routeSite() 從硬碟提供 public/ (不用伺服器、不連網)、watchErrors()
+│   │   ├── site.js             # 共用：routeSite() 從硬碟提供 public/ (不用伺服器、不連網)、startGame()、watchErrors()
 │   │   ├── spawn.spec.js       # 第 1 關恰好 1 個寶箱，其餘是怪物
 │   │   ├── csp.spec.js         # 開啟遊戲時沒有 console error (包含 CSP 擋下的資源)
 │   │   ├── boss.spec.js        # 第 5 關是火龍魔王關，截圖到 tools/work/boss_level.png
 │   │   ├── touch.spec.js       # 觸控搖桿、道具按鈕、遊戲區域與畫面方向 (見 8.6)
 │   │   ├── character.spec.js   # 角色圖載入成功，玩家碰撞範圍不受角色圖影響
+│   │   ├── character_select.spec.js  # 選角色畫面、選到的角色存檔、舊版存檔的轉換 (見 3.1、4.3)
 │   │   └── og-image.js         # 更新 public/screenshot.png
 │   ├── __init__.py、config.py  # Python 工具的套件與共用路徑
 │   ├── sprites.py              # 角色精靈圖建置：原圖 → public/characters/ 與 js/characters.js (見 private/doc/character_pipeline.md)
@@ -78,7 +80,7 @@ cherylgame/
 
 遊戲核心為基於 `requestAnimationFrame` 的自定義 Game Loop，不依賴大型遊戲引擎，確保極致的輕量化與靈活性。
 
-* **檔案拆分與載入順序**：所有 `.js` 都是 classic script，頂層宣告是全域、可跨檔案使用 (測試以 `page.evaluate` 直接存取)。`index.html` 依序載入 `js/experience.js` → `currency.js` → `achievements.js` → `shop.js` → `save.js` → `questions.js` → `stages.js` → `enemies.js` → `touch.js` → `characters.js` → `script.js`。
+* **檔案拆分與載入順序**：所有 `.js` 都是 classic script，頂層宣告是全域、可跨檔案使用 (測試以 `page.evaluate` 直接存取)。`index.html` 依序載入 `js/experience.js` → `currency.js` → `achievements.js` → `shop.js` → `save.js` → `questions.js` → `stages.js` → `enemies.js` → `touch.js` → `characters.js` → `character_select.js` → `script.js`。
     * `script.js` 最後載入，因為它一執行就會讀檔 (`loadProgress()`) 並開始第 1 關；系統檔案在載入時只定義常數與函式，不呼叫 `script.js`。
     * 系統檔案的**頂層**也不能用到 `script.js` 的常數（例如 `enemies.js` 不能寫 `const RANGE = 4 * TILE_SIZE`，載入時 `TILE_SIZE` 還不存在），所以距離直接寫像素；函式裡面可以用。
     * `achievements.js` 必須在 `save.js` 之前：`save.js` 載入時就用 `createEmptyStats()` 建立預設的 `profile`。
@@ -93,8 +95,8 @@ cherylgame/
     * 每格 128×128，每排一個動畫 (`idle`、`run`)，以 `drawScale` 0.5 畫成 64px；角色腳底中心 (`anchor`) 對齊玩家方塊的底部中心。
     * 玩家方塊固定 `PLAYER_WIDTH`×`PLAYER_HEIGHT`（50×52，跟改版前的繪製大小相同），碰撞範圍 `getPlayerHitbox()`、出生位置、擊退都以它為準，換角色不影響遊戲平衡。
     * 角色是插畫風，畫角色時開啟 `imageSmoothingEnabled`（品質 `high`），其他東西維持關閉。
-    * 遊戲目前固定使用騎士（`playerCharacter = CHARACTERS.knight`），原圖是改版前的 `Pal_test.png`（2 MB，已移到 `reference/`，網站上的角色圖剩 13 KB）。牧師（`cleric`）的圖已經在 `public/characters/`，但選角色的介面還沒做，玩家還不能選。各角色的進度見 [`work_plan.md`](work_plan.md) 第 2 節。
-    * **全身圖**（2026-11-13）：每個角色另外有一張 `public/characters/<id>_full.jpg`，給選角色介面與之後的角色面板顯示（介面還沒做，遊戲目前沒有載入它）。512×768 的 JPEG，所有角色大小相同；JPEG 沒有透明，工具去背後鋪上底色（預設是題目視窗的米色）。路徑與大小在 `CHARACTERS[id].fullBody`（`image`、`width`、`height`）；還沒有全身圖的角色沒有這個欄位（目前騎士沒有，等維護者重畫）。原圖就是核可的基準立繪 `<id>_base_vNN.png`，不用另外畫。細節見 [`character_pipeline.md`](character_pipeline.md) 3.1 節。
+    * **玩家的角色可以換**（2026-11-14）：`playerCharacter` 是目前角色在 `CHARACTERS` 裡的設定，只能用 `setPlayerCharacter(id)` 更換（換精靈圖、從待機動畫的第 1 格重新播放；新的圖載入完成前不畫角色；`id` 不存在時用預設角色 `DEFAULT_CHARACTER`，目前是騎士）。讀檔後先換成存檔裡的角色 `profile.character`，之後是選角色畫面（3.1）選到的角色。各角色只有外觀不同。騎士的精靈圖原圖是改版前的 `Pal_test.png`（2 MB，已移到 `reference/`，網站上的角色圖剩 13 KB）。各角色的進度見 [`work_plan.md`](work_plan.md) 第 2 節。
+    * **全身圖**（2026-11-13）：每個角色另外有一張 `public/characters/<id>_full.jpg`，給選角色畫面（3.1）與之後的角色面板顯示。512×768 的 JPEG，所有角色大小相同；JPEG 沒有透明，工具去背後鋪上底色（預設是題目視窗的米色）。路徑與大小在 `CHARACTERS[id].fullBody`（`image`、`width`、`height`）；還沒有全身圖的角色沒有這個欄位，用到的介面要能處理（選角色畫面改用精靈圖畫一張同樣大小的）。原圖就是核可的基準立繪 `<id>_base_vNN.png`，不用另外畫。細節見 [`character_pipeline.md`](character_pipeline.md) 3.1 節。
 * **Emoji 向量渲染**：將地圖物件 (🌲, 🌊, 🧱) 與敵人 (👾, 🐉, 🎁) 等 Emoji 透過 SVG 包裝並轉換為 Image 物件快取，確保在 Canvas 縮放時保持向量圖的清晰度。
 
 ### 2.2 關卡與地圖生成 (Map Generation)
@@ -153,6 +155,7 @@ cherylgame/
     * 畫面上關卡叫 Stage、角色等級叫 Lv，避免兩個「Level」混淆；程式裡的 `gameState.level` 仍是關卡。
     * 觸控模式隱藏道具欄（數量改顯示在道具按鈕上）；手機的 HUD 字級縮小為 18px。
 * **觸控控制區**：浮動搖桿與道具按鈕，觸控模式 (`body.touch-mode`) 才顯示，見第 8 節。原本的 D-Pad 與 Action 按鈕（對應沒有用到的空白鍵）已移除。
+* **選角色畫面** (`#character-overlay`)：每次開啟遊戲時先顯示，見 3.1。
 * **數學題庫彈窗**：使用絕對定位覆蓋於 Canvas 之上，採防呆設計（`isAnswering` 狀態鎖），防止玩家連點造成重複計分或錯誤判定。答對時第二行顯示獲得的經驗值與金幣。同一個視窗也用 `showMenu()` 顯示 Game Over、「歡迎回來」與過關選單（見 4.5、6.4）。
     * 題目出現後 0.3 秒內 (`ANSWER_LOCK_MS`) 按答案不算：兒童碰到怪物時手指可能還在畫面上，避免視窗一跳出來就誤按扣血。選單按鈕不受影響。
     * 視窗設有 `max-height`，畫面矮時可以捲動，答案按鈕不會超出畫面。
@@ -167,16 +170,37 @@ cherylgame/
 * **提示訊息 (toast)**：升級與成就解鎖時，`showToast()` 在 HUD 下方顯示 2.5 秒，蓋在題目視窗與商店之上。
 * **暫停中不能使用神速靴與無敵護盾**：它們是 5 秒的時效道具，在答題或選單畫面使用會白白耗掉；商店開著時數字鍵 1～4 完全不使用道具。
 
+### 3.1 選角色畫面 (js/character_select.js)
+
+2026-11-14 實作。維護者決定：**開始遊戲時先跳出選角色畫面，列出角色的全身圖讓玩家選**；目前的角色（騎士、牧師）一開始就都可以選。
+
+* **什麼時候顯示**：每次開啟遊戲（載入頁面）都先顯示，在「歡迎回來」之前；`script.js` 最末端呼叫 `showCharacterSelect(onChosen)`。顯示時遊戲暫停（`gameState.paused`），底下是已經產生好的關卡。New Game、從本關重來、過關都不會再顯示，沿用同一個角色；要換角色就重新開啟遊戲。
+* **畫面**：外觀跟題目視窗相同（米色底、咖啡色外框）。標題 `Choose Your Hero!`、一排角色卡（全身圖 + 名稱）、`Start ▶️` 按鈕。UI 文字是英文，角色名稱是 `CHARACTERS[id].name`（中文），跟道具名稱的做法一樣。
+    * 角色卡依 `js/characters.js` 產生，新增角色不用改這個畫面；預設角色排第一個，其他照 `characters.js` 的順序。
+    * 選到的角色有金色外框、名稱反白；沒選到的稍微變淡（不要淡到像是不能選）。
+    * 還沒有全身圖的角色：把精靈圖待機動畫的第 1 格放大，畫在同樣大小 (512×768) 的 canvas 上代替。
+* **操作**：點角色卡是「選取」，按 `Start ▶️` 才開始，點錯可以改。上次選的角色會預先選好，回來玩的玩家直接按 Start。鍵盤：左右鍵（或 A、D）換角色，Enter 開始。
+    * 選取時就先呼叫 `setPlayerCharacter()` 載入那個角色的精靈圖，按下 Start 時已經載入完成；**按 Start 才寫入存檔**（`profile.character`，見 4.1）。
+* **選完之後**（`onChosen`）：存檔在第 2 關以上 → 顯示「歡迎回來」（4.5）；否則 `resumeGame()` 直接開始，跟答完題一樣有 1.5 秒的保護時間。
+* **版面**（`style.css`）：
+    * 全身圖的底色已經鋪好、大小都是 2:3，角色卡以 `aspect-ratio` 先佔好位置，圖片載入前後視窗不會跳動。
+    * 角色卡最寬 244px；視窗寬度依角色數量（`--count`，每個角色 260px），畫面窄時角色卡一起縮小。
+    * 畫面矮時角色卡依高度縮小，整個視窗不用捲動：`resizeCanvas()` 把畫面高度寫進 CSS 變數 `--view-h`（跟畫布同一個來源，見 2.1），角色卡的寬度由它換算。不用 `vh`：部分 iOS 的 App 內建瀏覽器回報的高度比看得到的高（8.1）。
+    * 畫面高度 480px 以下（嵌入版的 iframe 是 288px，見 5.3）：標題縮小、Start 按鈕移到角色卡右邊。真的放不下時視窗可以捲動。
+    * 畫面方向不對的提示（8.2）蓋在這個畫面之上。
+* **角色變多時**：手機直向一排放 2 個角色剛好（每張約 150×224）；3 個以上會縮得太小，到時候要改成兩排（[`work_plan.md`](work_plan.md) 第 3 節）。
+* 驗證：`npm --prefix tools run test:select`（`tools/browser/character_select.spec.js`）；2026-11-14 的實測見 [`lessons_learned.md`](lessons_learned.md) 7.1。
+
 ## 4. 存檔機制 (Save System)
 
-2026-09-28 實作，目前格式為 v2（加入經驗值、貨幣與成就），程式在 `public/js/save.js`。
+2026-09-28 實作，目前格式為 v3（v2 加入經驗值、貨幣與成就；v3 加入選到的角色），程式在 `public/js/save.js`。
 
 ### 4.1 方案：本局進度 + 永久資料
 存檔分成兩部分，放在同一個 `localStorage` key，每次整份一起寫入，不會只存到一半：
 
 | | 本局進度 `run` | 永久資料 `profile` |
 |---|---|---|
-| 內容 | `level`、`hp`、`inventory` | `xp`、`gold`、`diamonds`、`stats`（答題統計）、`achievements` |
+| 內容 | `level`、`hp`、`inventory` | `xp`、`gold`、`diamonds`、`stats`（答題統計）、`achievements`、`character`（選到的角色） |
 | 寫入時機 | 只在「進關當下」：`startLevel()`，以及進關時開放的商店 | 一有變動就寫入（`saveProfile()`），關卡中途也可以 |
 | 重新整理 | 回到該關起點 | 保留 |
 | 從本關重來 | 回到進關時的數值 | 保留，不回溯 |
@@ -201,7 +225,7 @@ cherylgame/
 * `localStorage` key：`cherylgame.save`，內容：
     ```json
     {
-      "v": 2,
+      "v": 3,
       "run": { "level": 7, "hp": 2, "inventory": { "potion": 1, "boots": 0, "scroll": 2, "shield": 0 } },
       "profile": {
         "xp": 320, "gold": 45, "diamonds": 4,
@@ -210,31 +234,35 @@ cherylgame/
           "ops": { "+": { "correct": 15, "wrong": 1 }, "-": { "correct": 12, "wrong": 2 }, "*": { "correct": 13, "wrong": 0 } },
           "bossesDefeated": 1, "highestStage": 7
         },
-        "achievements": { "first_correct": 1790587643022, "first_boss": 1790587700000 }
+        "achievements": { "first_correct": 1790587643022, "first_boss": 1790587700000 },
+        "character": "cleric"
       }
     }
     ```
-* `JSON.parse` 失敗、或 `v` 不是 1 或 2 → 無存檔，從第 1 關開始。
+* `JSON.parse` 失敗、或 `v` 不是 1、2、3 → 無存檔，從第 1 關開始。
 * **`run`** 任何必要欄位不合格就只丟掉 `run`（從第 1 關開始），**`profile` 照常讀取**，不會因為本局進度壞掉就清空經驗值與鑽石：
     * `level` 必須是正整數。
     * `hp` 必須是整數，限制在 `1`～`MAX_HP`（`hp <= 0` 視為無效）。
     * `inventory` 以空道具欄為底，只合併已知道具、非負整數的欄位；將來新增道具時，舊存檔不會壞掉。
 * **`profile`** 以 `createEmptyProfile()` 為底，逐欄合併（`mergeCounts()`，巢狀的 `stats` 也逐層處理）：只取已知欄位中的非負整數，不合格的欄位用預設值，不認識的欄位丟棄。`achievements` 只保留 `ACHIEVEMENTS` 中存在的 id、值為正整數（解鎖時間）的項目。
-* **v1 → v2 轉換** (`migrateV1()`)：v1 格式是 `{ "v": 1, "level", "score", "hp", "inventory" }`。`level`、`hp`、`inventory` 成為 `run`；分數與經驗值同樣是每答對一題 +10，所以 `score` 直接成為 `profile.xp`，其他永久資料從 0 開始。維持 v1 的規則，`score` 不是非負整數時視為無存檔。轉換後的第一次 `startLevel()` 就會以 v2 格式寫回。
+    * `mergeCounts()` 只處理預設值是數字的欄位。`character` 是字串，另外檢查：必須是 `js/characters.js` 裡有的角色 id（`isCharacterId()`），否則用預設角色 `DEFAULT_CHARACTER`（騎士）。角色之後被移除、或存檔被改壞，都不會讓遊戲無法啟動。
+* **v1 → v2 轉換** (`migrateV1()`)：v1 格式是 `{ "v": 1, "level", "score", "hp", "inventory" }`。`level`、`hp`、`inventory` 成為 `run`；分數與經驗值同樣是每答對一題 +10，所以 `score` 直接成為 `profile.xp`，其他永久資料從 0 開始。維持 v1 的規則，`score` 不是非負整數時視為無存檔。轉換後的第一次 `startLevel()` 就會以目前的格式寫回。
+* **v2 → v3 轉換**（2026-11-14）：v3 只多了 `profile.character`，其他欄位相同。`parseSave()` 把 v2 當成 v3 讀取，沒有 `character` 就是預設角色；進度與永久資料都保留，第一次 `startLevel()` 以 v3 寫回。
+    * 反過來不行：舊版的程式讀到 v3 的存檔會當成沒有存檔。部署之後如果要退回舊版，已經玩過新版的玩家進度會消失。
 * **存檔格式改變時要提高 `SAVE_VERSION`，並在 `parseSave()` 加上舊版本的轉換**；只提高版本號的話，`v` 不符會被當成無存檔，現有玩家的進度會全部消失。
 * **所有 `localStorage` 存取都必須包在 `try/catch` 裡**（只在 `save.js` 的 `readSave()`、`clearSave()`、`writeSave()`）。在 sandbox iframe 中，連讀取 `window.localStorage` 這個屬性都會丟出 `SecurityError`（見第 5 節）；沒有攔截的話整個遊戲會無法啟動。失敗時靜默退化為「不存檔」模式，遊戲照常進行，`checkpoint` 與 `profile` 仍保留在記憶體中。
 
 ### 4.4 程式結構 (public/js/save.js)
 | 名稱 | 作用 |
 |---|---|
-| `SAVE_KEY`、`SAVE_VERSION` | 檔案開頭的常數 |
+| `SAVE_KEY`、`SAVE_VERSION`、`DEFAULT_CHARACTER` | 檔案開頭的常數。`DEFAULT_CHARACTER` 是預設角色的 id，放在這裡是因為 `save.js` 載入時就要建立預設的 `profile` |
 | `checkpoint` | 記憶體中「最近一次進關時」的本局進度。`localStorage` 無法使用時（例如 sandbox iframe），Game Over 仍能用它從本關重來 |
 | `profile` | 永久資料。各系統直接讀寫自己的欄位，改完呼叫 `saveProfile()` |
 | `saveProgress()` | 更新 `checkpoint` 並存檔。只在 `startLevel()` 與商店購買 (`buyItem()`) 時呼叫 |
 | `saveProfile()` | 永久資料有變動時呼叫。`run` 一律寫入 `checkpoint`，所以關卡中途呼叫也不會存到中途的道具 |
 | `loadProgress()` | 處理 `?newgame`，讀取並套用存檔。在 `script.js` 第一次呼叫 `startLevel()` 之前執行 |
 | `readSave()`、`parseSave()`、`parseRun()`、`parseProfile()`、`migrateV1()`、`clearSave()`、`writeSave()` | `localStorage` 存取（全部包 `try/catch`）與 4.3 的驗證、轉換規則 |
-| `createEmptyProfile()`、`mergeCounts()` | 永久資料的預設值，以及「以預設值為底、只合併已知欄位」的驗證 |
+| `createEmptyProfile()`、`mergeCounts()`、`isCharacterId()` | 永久資料的預設值、「以預設值為底、只合併已知欄位」的驗證，以及角色 id 是否存在 |
 | `applyProgress()` | 把本局進度寫回 `gameState`，道具欄會複製一份，避免遊戲中修改到 `checkpoint` |
 
 `script.js` 中與存檔相關的函式：
@@ -253,16 +281,16 @@ cherylgame/
 * **UI 時序限制**：`showWelcomeBack()` 放在 `script.js` 最末端 `updateHUD()` 初始化之後。`hpDisplayCache`、`isAnswering` 等變數以 `let` 宣告在 `script.js` 中段，第一次 `startLevel()` 執行時它們還不能使用（TDZ），提早呼叫 `updateHUD()`／`updateHintButton()` 會丟出 `ReferenceError`，遊戲直接停止。第一次 `startLevel()` 會呼叫 `recordStageReached()`，可能解鎖成就並顯示提示，所以 `showToast()` 與各系統更新 HUD 的函式都直接操作 DOM，不使用 `script.js` 的 `let` 變數。
 
 ### 4.5 玩家流程 (UX)
-* **開場**：
+* **開場**：每次開啟遊戲都先顯示選角色畫面（3.1），選好之後：
     * 沒有存檔，或存檔在第 1 關 → 直接開始遊戲。
-    * 存檔在第 2 關以上 → 暫停遊戲，顯示「Welcome Back! / Stage N」與兩個按鈕：`Continue ▶️`（`resumeGame()`）、`New Game 🔄`（`resetGame()`）。
+    * 存檔在第 2 關以上 → 維持暫停，顯示「Welcome Back! / Stage N」與兩個按鈕：`Continue ▶️`（`resumeGame()`）、`New Game 🔄`（`resetGame()`）。
     * 選單沒有題目，所以 `showMenu()` 會停用提示卷軸（設 `hintUsed = true`，下次出題時重設），避免按鍵 3 把選單按鈕當成錯誤答案隱藏。
 * **過關**：暫停並顯示「Stage N Clear! 🎉」與目前金幣，按鈕 `Stage N+1 ▶️`（直接開始）與 `Shop 🛒`（見 6.4）。
 * **Game Over**：**不清除存檔**，畫面顯示累計經驗值。
     * 第 2 關以上：顯示 `Retry Stage N 🔁`（`restartFrom(checkpoint)`）與 `New Game 🔄`。
     * 第 1 關：只顯示 `Play Again 🔄`。
     * 理由：本遊戲以兒童練習數學為目的，從關卡起點重來比整個歸零的挫折感低。
-* **New Game** 只重設本局進度；經驗值、金幣、鑽石、答題統計、成就都保留。
+* **New Game** 只重設本局進度；經驗值、金幣、鑽石、答題統計、成就、選到的角色都保留。
 * **已知取捨**：
     * 關卡中途重新整理頁面，會回到該關起點，HP 與道具也回到進關時的數值；經驗值與金幣保留。對兒童遊戲可接受，不另外防範。
     * 從本關重來時，HP 是進關時的數值；若進關時只剩 1 顆心，重來也只有 1 顆心。
@@ -270,7 +298,7 @@ cherylgame/
 * 選單文字沿用現有 UI 的英文風格（Math Challenge!、Game Over、Play Again）。
 
 ### 4.6 驗證方式
-2026-09-28 存檔 v1（28 項）與 v2 的實測結果：[`lessons_learned.md`](lessons_learned.md) 2.1。
+2026-09-28 存檔 v1（28 項）與 v2 的實測結果：[`lessons_learned.md`](lessons_learned.md) 2.1。v3（選到的角色、v2 的轉換）由 `tools/browser/character_select.spec.js` 自動檢查，2026-11-14 的結果見 [`lessons_learned.md`](lessons_learned.md) 7.1。
 
 ### 4.7 存檔的限制
 * 存檔只存在「該瀏覽器 + 該網址來源 (origin)」。換裝置、換瀏覽器、無痕模式都不會帶過去。
@@ -572,9 +600,10 @@ cherylgame/
 ### 9.3 寫法
 * CommonJS（`require`、`module.exports`），由 Playwright 直接執行，沒有 TypeScript 或打包。註解用繁體中文，跟遊戲程式一致。
 * **`routeSite(page)`**（`tools/browser/site.js`）：開頁面前呼叫。網址用保留給測試的 `http://cherylgame.test`，本站的請求比照 Cloudflare Pages 從硬碟讀 `public/`（大小寫要相同、`/` 對到 `index.html`），找不到回 404；其他網站（Google Tag Manager 等）一律回空內容。不用架伺服器、不佔連接埠，也不連網；GTM 的 script 是空的，所以不會送出 GA 資料。
+* **`startGame(page, query)`**：開啟遊戲並在開場的選角色畫面按下 Start（用預先選好的角色）。選角色畫面會暫停遊戲，要在遊戲進行中檢查的測試（觸控、魔王關的截圖、`og-image.js`）用它開頁面；檢查選角色畫面本身、或只看載入結果的測試用 `page.goto(gameUrl())`。
 * **`watchErrors(page)`**：收集未攔截的例外與 console error（包含 CSP 擋下的資源），每個測試最後檢查是空的。
 * `touch.spec.js` 每一項行為是一個測試，每個測試開新的頁面；裝置以 `test.use({ viewport, screen, isMobile, hasTouch })` 設定。
-* `og-image.js` 以 1280×720 開啟第 1 關剛開始的畫面，跟原本 `verify_csp.js` 產生的分享圖大小相同。
+* `og-image.js` 以 1280×720 開啟第 1 關剛開始的畫面（用預設的騎士開始後先暫停再截圖，敵人不動、角色不閃爍），跟原本 `verify_csp.js` 產生的分享圖大小相同。
 * **Python**：照 mumuisland-web 的做法：`tools/__init__.py`、`tools/config.py`（共用路徑）、一個工具一個模組（`python -m tools.<module>`）、`tools/tests/test_<module>.py` 的 `unittest`（暫存檔寫在 `tools/work/`）。註解用繁體中文。`.gitignore` 已忽略 `.venv/`、`__pycache__/` 與根目錄的 `/*.py`。
     * 只用維護者電腦系統 Python 已安裝的 Pillow 12.3.0（2026-11-01 維護者決定），不建 venv、不另外安裝。
 
@@ -593,9 +622,10 @@ cherylgame/
 * 全身圖（2026-11-13）：
     * 原圖去背後取最大的一塊當角色，等比例縮放到 512×768 的畫面裡（四周留 6%），左右置中、腳底貼齊下方的留白線，鋪上底色後存成 JPEG（品質 85、色度不抽樣、漸進式）。
     * 全身圖只縮小 2～3 倍，精靈圖用的去背留下的幾像素綠邊會看得出來，所以多一道去邊 `clean_edges()`：由外往內最多剝 8 圈還帶著背景色的像素，再對邊緣 16 圈做溢色修正。只處理綠幕、洋紅背景。
+    * 設定檔的 `fullBody.tolerance` 是只給全身圖用的去背容許值：細縫裡殘留的背景色在全身圖上看得出來、需要比精靈圖高的容許值時用，精靈圖不受影響（騎士用 50）。
     * `--full-body <id>` 只重建全身圖與 `characters.js` 的 `fullBody`，不讀動畫的原圖、不動精靈圖。Claude Code 讀不到 Drive，需要原圖時由維護者在對話中附上定稿圖。
     * `--check` 對全身圖不是逐位元組比較：大小相同，而且色差超過 8 的像素不到千分之一就算一致（JPEG 是有損壓縮，不同作業系統的結果可能有極小的差異）。設定檔沒有 `fullBody` 但圖還在、或圖沒有對應的設定檔，也會列出來。
-* 每次轉檔與測試的實測數據：[`lessons_learned.md`](lessons_learned.md) 1.6、1.7、5.3。
+* 每次轉檔與測試的實測數據：[`lessons_learned.md`](lessons_learned.md) 1.6、1.7、1.9、5.3。
 
 ### 9.7 美術素材的分工與交接
 2026-11-12 起。Jules 已停用，改用 Google Antigravity；它能直接讀寫自己建立的 Google Drive 檔案，也能生圖。維護者決定：

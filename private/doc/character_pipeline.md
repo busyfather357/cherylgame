@@ -36,6 +36,7 @@
     * 兩個動畫畫在同一張圖（4 欄 × 2 排）：`frames` 填 `[0, 1, 2, 3]`、`[4, 5, 6, 7]`。
     * 只有基準立繪、沒有動畫：`idle` 與 `run` 都用 `"frames": [0]`，角色是靜態的。
     * 全身圖：加上 `"fullBody": { "source": "<id>_base_vNN.png" }`，原圖就是核可的基準立繪。
+        * 全身圖的細縫裡留下背景色（4.3）時，加上只給全身圖用的去背容許值，例如騎士的 `"fullBody": { "source": "knight_base_v01.png", "tolerance": 50 }`。不要為了全身圖去改最上層的 `tolerance`，精靈圖會跟著變。
     * 新的插畫風角色不要設 `colors`（全彩）。洋紅背景不用另外設定，工具會自己判斷背景色。
 3. **建置**：`python -m tools.sprites <id>`。只拿得到基準立繪、沒有動畫原圖的環境，用 `python -m tools.sprites --full-body <id>`。
 4. **看結果**，有問題照 4.3 調整後重建：
@@ -43,8 +44,10 @@
     * `preview.png` 與各動畫的 GIF：有沒有綠邊、腳底是不是在同一條線、動作連不連貫、頭部晃動幾像素。
     * `public/characters/<id>_full.jpg`：邊緣有沒有綠邊、有沒有被放大而模糊。
 5. **原圖本身有問題**（留下綠邊、切格錯誤、動作不連貫）：回報是 `art_guide.md` 的哪一條，由維護者或 Antigravity 重畫；不要手動修圖。規則不夠清楚就修改 `art_guide.md`。
-6. **測試**：`python -m tools.sprites --check`、`python -m unittest discover -s tools/tests -t .`、`npm --prefix tools run test:character`。
-7. **在遊戲裡看效果**：遊戲目前固定使用騎士（`public/script.js` 的 `playerCharacter = CHARACTERS.knight`），選角色的介面還沒做。可以暫時改這一行試玩，看完改回來，不要提交。
+6. **測試**：`python -m tools.sprites --check`、`python -m unittest discover -s tools/tests -t .`、`npm --prefix tools run test:character`、`npm --prefix tools run test:select`。
+7. **在遊戲裡看效果**：開啟遊戲，在開場的選角色畫面選那個角色。選角色畫面依 `js/characters.js` 列出所有角色，新角色建置完就會出現，不用改遊戲程式（`system_architecture.md` 3.1）。
+    * 角色一出現在 `characters.js`，玩家就選得到。還不想公開的角色不要合併進 `main`。
+    * 手機直向一排放 2 個角色剛好，3 個以上要先改選角色畫面的版面（[`work_plan.md`](work_plan.md) 第 3 節）。
 8. **更新文件並交付**：[`work_plan.md`](work_plan.md) 第 2 節的狀態、有新的實測經驗時寫進 [`lessons_learned.md`](lessons_learned.md)，再照 `AGENTS.md` 的「Git 與 PR 流程」交付。
 
 ## 3. 遊戲使用的格式
@@ -101,7 +104,7 @@ const CHARACTERS = {
 ```
 
 * **原圖就是核可的基準立繪** `reference/characters/<id>/<id>_base_vNN.png`（[`art_guide.md`](art_guide.md) 6.11 節），不用另外畫，也不是精靈圖的某一格：動畫原圖每格只有 400～500px 高，基準立繪是一整張圖畫一個角色，解析度高得多。`fullBody.source` 可以指向資料夾裡的任何一張定稿，維護者之後想換一張圖當全身圖時改這裡。
-* 遊戲還沒有用到它（選角色介面排在 [`work_plan.md`](work_plan.md) 第 3 節）。CSP 的 `img-src 'self'` 已經允許；介面打開時才載入，不要在遊戲一開始就載入所有角色的全身圖。
+* 用在開場的選角色畫面（`system_architecture.md` 3.1），由畫面建立角色卡時載入；CSP 的 `img-src 'self'` 已經允許。之後的角色面板也一樣，介面打開時才載入。每張約 55 KB，角色變多時留意開場要下載的總量。
 
 ## 4. 工具 (`tools/sprites.py`)
 
@@ -132,6 +135,7 @@ const CHARACTERS = {
 10. **全身圖**（設定檔有 `fullBody` 時，3.1 節）：全身圖的原圖用同樣的方式去背，取最大的一塊當角色（切出不只一塊時報告會提醒）→ 去邊 → 等比例縮放到 512×768 的畫面裡 → 鋪上底色 → 存成 JPEG（品質 85、色度不抽樣、漸進式）。
     * 去邊 (`clean_edges()`)：精靈圖縮小 16 倍以上，第 2 步留下的幾像素綠邊看不出來；全身圖只縮小 2～3 倍，生圖模型的柔邊與 JPEG 壓縮滲進輪廓的背景色會變成一圈明顯的綠邊。所以由外往內最多再剝 8 圈「還帶著背景色」的像素（背景的主色比其他色版高出 24 以上），乾淨的像素留著；剩下的邊緣 16 圈再做溢色修正。只處理綠幕、洋紅背景。牧師的原圖去邊前有 15,673 個偏綠的像素，去邊後 0 個。
     * 原圖裡的角色不到 676px 高時會被放大，報告會提醒。
+    * 去背的容許值預設跟精靈圖相同（最上層的 `tolerance`）；設定檔有 `fullBody.tolerance` 時全身圖的原圖改用它，報告會註明。同一張原圖同時是精靈圖與全身圖的原圖時，兩種容許值各自處理。
     * `--check` 對全身圖不是逐位元組比較：大小相同，而且色差超過 8 的像素不到千分之一就算一致。JPEG 是有損壓縮，同一份原圖與設定在不同作業系統上的結果可能有極小的差異。
 
 ### 4.3 看報告與調整
@@ -142,6 +146,7 @@ const CHARACTERS = {
 | 某一格位置怪怪的 | 用 `offsets` 微調那一格 |
 | 角色太大、邊緣被裁掉，或太小 | 改 `charHeight`（或加大 `cell`） |
 | 背景沒去乾淨，或角色被吃掉 | 調整 `tolerance` |
+| 只有全身圖的細縫（手臂、武器與身體之間）留下一小塊背景色 | 加上 `fullBody.tolerance`，從 50 開始試，用去得乾淨的最小值；精靈圖不受影響。去邊只處理輪廓，碰不到角色內部的細縫 |
 | 全身圖切出不只一格 | 工具只用最大的一格；其他部分是不是應該連在角色身上，回頭看原圖 |
 | 全身圖被放大而模糊 | 原圖裡的角色不到 676px 高，要重畫比較大的 |
 | 全身圖的底色要換 | `fullBody` 加上 `"background"`：`"#RRGGBB"`，或 `["中央", "四角"]` 兩個顏色 |

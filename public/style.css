@@ -287,8 +287,8 @@
             padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
         }
 
-        /* Math Challenge Modal (商店視窗共用同樣的外觀) */
-        #math-modal-overlay, #shop-overlay {
+        /* Math Challenge Modal (商店視窗、選角色畫面共用同樣的外觀) */
+        #math-modal-overlay, #shop-overlay, #character-overlay {
             display: none;
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -297,7 +297,7 @@
             justify-content: center;
             align-items: center;
         }
-        #math-modal, #shop-modal {
+        #math-modal, #shop-modal, #character-modal {
             background: #fff8dc;
             border: 8px solid #8b4513;
             border-radius: 20px;
@@ -312,7 +312,7 @@
             max-height: calc(100% - 72px);
             overflow-y: auto;
         }
-        #math-title, #shop-title {
+        #math-title, #shop-title, #character-title {
             color: #d2691e;
             font-size: 28px;
             margin-top: 0;
@@ -482,4 +482,105 @@
             width: 100%;
             margin-top: 4px;
             padding: 10px;
+        }
+
+        /* 選角色畫面 (js/character_select.js)：每次開啟遊戲時先顯示。標題、一排角色卡 (全身圖 + 名稱)、Start 按鈕 */
+        #character-modal {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr);
+            justify-items: center;
+            row-gap: 12px;
+            box-sizing: border-box;
+            /* 寬度依角色數量 (--count，js/character_select.js 設定)：每個角色 260px */
+            width: calc(var(--count, 2) * 260px + 40px);
+            max-width: calc(100% - 24px);
+            max-height: calc(100% - 24px);
+            overflow-y: auto; /* 畫面太矮放不下時可以捲動 */
+            padding: 16px 20px;
+        }
+        #character-title { margin: 0; }
+        #character-list {
+            /* 角色卡的寬度：最多 244px；畫面矮時依高度縮小，整個視窗才不用捲動。
+               全身圖是 2:3；--view-h 是畫面高度 (script.js 的 resizeCanvas() 設定)，250px 是視窗其他部分的高度 */
+            --card-w: min(244px, calc((var(--view-h, 100vh) - 250px) * 2 / 3));
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            width: 100%;
+        }
+        /* 角色卡是按鈕：寬度不夠時一起縮小 */
+        .character-card {
+            flex: 0 1 max(80px, var(--card-w));
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            padding: 0;
+            border: 0;
+            background: none;
+            font-family: inherit;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+        /* 全身圖 (512×768 的 JPEG，底色已經鋪好)；沒有全身圖的角色是同樣大小的 canvas */
+        .character-portrait {
+            display: block;
+            box-sizing: border-box;
+            width: 100%;
+            height: auto;
+            aspect-ratio: 2 / 3; /* 圖片載入前就佔好位置，視窗不會跳動 */
+            border: 4px solid #cd853f;
+            border-radius: 16px;
+            background: #fff8dc;
+            transition: transform 0.1s, box-shadow 0.15s, filter 0.15s;
+        }
+        .character-name {
+            padding: 2px 14px;
+            border-radius: 14px;
+            font-size: 22px;
+            font-weight: bold;
+            color: #8b6b4a;
+        }
+        /* 沒選到的角色稍微變淡 (不要淡到像是不能選)；選到的加上金色外框，名稱反白 */
+        .character-card:not(.selected) .character-portrait { filter: saturate(0.85) opacity(0.85); }
+        .character-card.selected .character-portrait {
+            border-color: #d2691e;
+            box-shadow: 0 0 0 4px #ffd700, 0 6px 14px rgba(0, 0, 0, 0.35);
+        }
+        .character-card.selected .character-name {
+            background: #8b4513;
+            color: #fff;
+        }
+        .character-card:active .character-portrait { transform: scale(0.97); }
+        .character-card:focus-visible { outline: none; }
+        .character-card:focus-visible .character-portrait { outline: 3px solid #6a8fd6; outline-offset: 5px; }
+        #character-start {
+            min-width: 60%;
+            padding: 12px 24px;
+        }
+        @media (max-width: 480px) {
+            #character-modal { padding: 12px; }
+            #character-list { gap: 12px; }
+        }
+        /* 畫面很矮 (嵌入版的 iframe、縮小的視窗)：標題縮小，Start 移到角色卡右邊，角色卡才有高度可以用 */
+        @media (max-height: 480px) {
+            #character-modal {
+                grid-template-columns: minmax(0, 1fr) auto;
+                align-items: center;
+                column-gap: 12px;
+                row-gap: 6px;
+                padding: 8px 12px;
+            }
+            #character-title {
+                grid-column: 1 / -1;
+                font-size: 20px;
+            }
+            #character-list { --card-w: min(244px, calc((var(--view-h, 100vh) - 132px) * 2 / 3)); }
+            .character-name { font-size: 16px; }
+            #character-start {
+                min-width: 0;
+                padding: 12px;
+                font-size: 20px;
+            }
         }

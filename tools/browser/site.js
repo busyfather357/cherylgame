@@ -54,6 +54,13 @@ async function routeSite(page) {
     });
 }
 
+// 開啟遊戲，並在開場的選角色畫面 (js/character_select.js) 按下 Start，用預先選好的角色開始。
+// 回傳時遊戲已經在進行 (第 2 關以後的存檔會停在歡迎回來的選單)。要檢查選角色畫面本身的測試改用 page.goto(gameUrl())
+async function startGame(page, query = '?newgame') {
+    await page.goto(gameUrl(query));
+    await page.click('#character-start');
+}
+
 // 收集未攔截的例外與 console error (包含 CSP 擋下的資源)；回傳的陣列會持續累積，測試最後檢查是空的
 function watchErrors(page) {
     const errors = [];
@@ -64,4 +71,4 @@ function watchErrors(page) {
     return errors;
 }
 
-module.exports = { PUBLIC_DIR, WORK_DIR, SITE_ORIGIN, resolvePath, gameUrl, routeSite, watchErrors };
+module.exports = { PUBLIC_DIR, WORK_DIR, SITE_ORIGIN, resolvePath, gameUrl, startGame, routeSite, watchErrors };

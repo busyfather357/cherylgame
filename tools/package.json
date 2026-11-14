@@ -10,6 +10,7 @@
     "test:boss": "playwright test boss.spec.js",
     "test:touch": "playwright test touch.spec.js",
     "test:character": "playwright test character.spec.js",
+    "test:select": "playwright test character_select.spec.js",
     "og-image": "node browser/og-image.js"
   },
   "devDependencies": {

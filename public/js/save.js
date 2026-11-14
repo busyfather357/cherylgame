@@ -2,12 +2,16 @@
 // 同一個 localStorage key 存兩部分，每次整份一起寫入，不會只存到一半：
 //   run     本局進度 (level、hp、inventory)：只記錄「進關當下」的狀態，重新整理、從本關重來都回到這裡。
 //           不可以在關卡中途更新，否則讀檔後寶箱重生，可被用來刷道具。
-//   profile 永久資料 (經驗值、金幣、鑽石、答題統計、成就)：一有變動就寫入，New Game 與從本關重來都不回溯。
-// 相依：gameState、ITEM_TYPES、MAX_HP、createEmptyInventory() (script.js)；createEmptyStats()、ACHIEVEMENTS (achievements.js)
+//   profile 永久資料 (經驗值、金幣、鑽石、答題統計、成就、選到的角色)：一有變動就寫入，New Game 與從本關重來都不回溯。
+// 相依：gameState、ITEM_TYPES、MAX_HP、createEmptyInventory() (script.js)；createEmptyStats()、ACHIEVEMENTS (achievements.js)；
+//       CHARACTERS (characters.js，比本檔晚載入，只在函式裡使用)
 // 所有 localStorage 存取都包 try/catch：sandbox iframe 中連讀取 window.localStorage 都會丟 SecurityError。
 
 const SAVE_KEY = 'cherylgame.save';
-const SAVE_VERSION = 2;
+const SAVE_VERSION = 3;
+
+// 預設角色：還沒選過角色，或存檔裡的角色已經不存在時使用 (選角色畫面在 js/character_select.js)
+const DEFAULT_CHARACTER = 'knight';
 
 // 最近一次進關時的本局進度。localStorage 無法使用時 (例如 sandbox iframe)，Game Over 仍可用它從本關重來
 let checkpoint = null;
@@ -21,8 +25,14 @@ function createEmptyProfile() {
         gold: 0,
         diamonds: 0,
         stats: createEmptyStats(),
-        achievements: {} // 成就 id → 解鎖時間 (Date.now())
+        achievements: {}, // 成就 id → 解鎖時間 (Date.now())
+        character: DEFAULT_CHARACTER // 選到的角色 (js/characters.js 的 id)
     };
+}
+
+// id 是不是 js/characters.js 裡有的角色
+function isCharacterId(id) {
+    return typeof id === 'string' && Object.prototype.hasOwnProperty.call(CHARACTERS, id);
 }
 
 function isIntAtLeast(value, min) {
@@ -30,13 +40,14 @@ function isIntAtLeast(value, min) {
 }
 
 // 以 template (預設值) 為底，只合併已知欄位中的非負整數，巢狀物件逐層處理。
-// 將來新增欄位時舊存檔也能讀，不認識的欄位與不合格的數值會被丟棄
+// 將來新增欄位時舊存檔也能讀，不認識的欄位與不合格的數值會被丟棄。
+// 預設值不是數字的欄位 (例如 character) 不在這裡處理，由 parseProfile() 各自檢查
 function mergeCounts(template, data) {
     if (!data || typeof data !== 'object') return template;
     for (const key of Object.keys(template)) {
-        if (typeof template[key] === 'object') {
+        if (template[key] && typeof template[key] === 'object') {
             mergeCounts(template[key], data[key]);
-        } else if (isIntAtLeast(data[key], 0)) {
+        } else if (typeof template[key] === 'number' && isIntAtLeast(data[key], 0)) {
             template[key] = data[key];
         }
     }
@@ -61,6 +72,8 @@ function parseProfile(data) {
             if (isIntAtLeast(data.achievements[id], 1)) result.achievements[id] = data.achievements[id];
         }
     }
+    // 角色不存在 (v2 的存檔沒有這個欄位、角色被移除) 時維持預設角色
+    if (data && isCharacterId(data.character)) result.character = data.character;
     return result;
 }
 
@@ -74,7 +87,8 @@ function parseSave(raw) {
     }
     if (!data || typeof data !== 'object') return null;
     if (data.v === 1) return migrateV1(data);
-    if (data.v !== SAVE_VERSION) return null;
+    // v2 → v3：只多了 profile.character，其他欄位相同；v2 的存檔沒有這個欄位，parseProfile() 會用預設角色
+    if (data.v !== 2 && data.v !== SAVE_VERSION) return null;
     return { run: parseRun(data.run), profile: parseProfile(data.profile) };
 }
 
